@@ -1,0 +1,102 @@
+import React, { useState } from "react";
+import { Layout } from "@/components/Layout";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { TableWrapper, Thead, Th, Tbody, Tr, Td } from "@/components/ui/Table";
+import { Plus, Search, Edit2, Trash2, MoreVertical } from "lucide-react";
+
+const MOCK_STUDENTS = [
+  { id: 1, name: "Ahmad Budi", nis: "1001", kelas: "10-A", jk: "L", ortu: "Pak Budi" },
+  { id: 2, name: "Siti Aminah", nis: "1002", kelas: "10-A", jk: "P", ortu: "Ibu Aminah" },
+  { id: 3, name: "Rina Kusuma", nis: "1003", kelas: "10-A", jk: "P", ortu: "Ibu Rina" },
+  { id: 4, name: "Deni Hidayat", nis: "1004", kelas: "10-A", jk: "L", ortu: "Ibu Rina Kusuma" },
+  { id: 5, name: "Eko Pratama", nis: "1005", kelas: "10-B", jk: "L", ortu: "Pak Eko" },
+  { id: 6, name: "Fitri Handayani", nis: "1006", kelas: "10-B", jk: "P", ortu: "Ibu Fitri" },
+  { id: 7, name: "Galih Wisnu", nis: "1007", kelas: "11 IPA", jk: "L", ortu: "Pak Galih" },
+];
+
+export default function AdminStudents() {
+  const [search, setSearch] = useState("");
+  const [openDropdown, setOpenDropdown] = useState<number | null>(null);
+
+  const filtered = MOCK_STUDENTS.filter(s =>
+    s.name.toLowerCase().includes(search.toLowerCase()) ||
+    s.nis.includes(search)
+  );
+
+  return (
+    <Layout role="admin">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-900">Data Siswa</h1>
+          <p className="text-zinc-500">Kelola data siswa seluruh kelas.</p>
+        </div>
+        <Button variant="primary">
+          <Plus size={18} /> Tambah Siswa
+        </Button>
+      </div>
+
+      {/* Search */}
+      <Card className="mb-6 p-4">
+        <div className="flex items-center gap-3">
+          <Search size={18} className="text-zinc-400" />
+          <input
+            type="text"
+            placeholder="Cari berdasarkan nama atau NIS..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 text-sm border-none outline-none bg-transparent text-zinc-700 placeholder:text-zinc-400"
+          />
+        </div>
+      </Card>
+
+      {/* Table */}
+      <Card className="p-0 overflow-hidden">
+        <TableWrapper>
+          <Thead>
+            <Tr>
+              <Th>Nama Siswa</Th>
+              <Th>NIS</Th>
+              <Th>Kelas</Th>
+              <Th>JK</Th>
+              <Th>Orang Tua</Th>
+              <Th className="text-right">Aksi</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {filtered.map((s) => (
+              <Tr key={s.id}>
+                <Td className="font-medium text-zinc-900">{s.name}</Td>
+                <Td className="text-zinc-500 text-xs font-mono">{s.nis}</Td>
+                <Td className="text-zinc-600">{s.kelas}</Td>
+                <Td className="text-zinc-600">{s.jk}</Td>
+                <Td className="text-zinc-600">{s.ortu}</Td>
+                <Td className="text-right relative">
+                  <button
+                    onClick={() => setOpenDropdown(openDropdown === s.id ? null : s.id)}
+                    className="text-zinc-400 hover:text-zinc-600 transition-colors p-1 rounded-md hover:bg-zinc-100 inline-flex"
+                  >
+                    <MoreVertical size={18} />
+                  </button>
+                  {openDropdown === s.id && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
+                      <div className="absolute right-6 top-10 w-36 bg-white rounded-lg shadow-lg border border-zinc-100 z-50 py-1">
+                        <button className="w-full text-left px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2 transition-colors">
+                          <Edit2 size={16} /> Edit
+                        </button>
+                        <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
+                          <Trash2 size={16} /> Hapus
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </TableWrapper>
+      </Card>
+    </Layout>
+  );
+}

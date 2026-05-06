@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+//////////////////// ENUM ////////////////////
+
+enum StatusGuru {
+  AKTIF
+  NONAKTIF
+}
+
+enum Role {
+  KEPALA_SEKOLAH
+  WALI_KELAS
+  GURU_MAPEL
+}
+
+enum StatusKehadiran {
+  HADIR
+  IZIN
+  SAKIT
+  ALPA
+}
+
+enum JenisKelamin {
+  L
+  P
+}
+
+enum StatusAktif {
+  AKTIF
+  NONAKTIF
+}
+
+//////////////////// TABEL ////////////////////
+
+model Guru {
+  id        Int    @id @default(autoincrement())
+  nip       String
+  password  String
+  nama      String
+  email     String
+  status    StatusGuru
+  noHp      String
+  role      Role
+
+  laporan        Laporan[]
+  sesiAbsensi    SesiAbsensi[]
+  guruTahun      GuruTahun[]
+}
+
+model Siswa {
+  id        Int    @id @default(autoincrement())
+  nis       String
+  nama      String
+  ttl       String
+  status    StatusAktif
+  jk        JenisKelamin
+
+  laporan        Laporan[]
+  absensi        Absensi[]
+  siswaKelas     SiswaKelas[]
+  orangTua       OrangTua?
+  izin           IzinKehadiran[]
+}
+
+model Kelas {
+  id        Int    @id @default(autoincrement())
+  nama      String
+
+  siswaKelas   SiswaKelas[]
+}
+
+model TahunAjaran {
+  id        Int @id @default(autoincrement())
+  status    String
+  mulai     DateTime
+  selesai   DateTime
+
+  sesiAbsensi  SesiAbsensi[]
+  guruTahun    GuruTahun[]
+  periode      Periode[]
+}
+
+model SiswaKelas {
+  id        Int @id @default(autoincrement())
+  siswaId   Int
+  kelasId   Int
+
+  siswa     Siswa @relation(fields: [siswaId], references: [id])
+  kelas     Kelas @relation(fields: [kelasId], references: [id])
+
+  guruTahun GuruTahun[]
+}
+
+model GuruTahun {
+  id              Int @id @default(autoincrement())
+  guruId          Int
+  tahunAjaranId   Int
+  siswaKelasId    Int
+  mataPelajaran   String
+
+  guru        Guru         @relation(fields: [guruId], references: [id])
+  tahun       TahunAjaran  @relation(fields: [tahunAjaranId], references: [id])
+  siswaKelas  SiswaKelas   @relation(fields: [siswaKelasId], references: [id])
+}
+
+model SesiAbsensi {
+  id              Int @id @default(autoincrement())
+  tahunAjaranId   Int
+  guruId          Int
+  notes           String?
+  mataPelajaran   String
+  tanggal         DateTime
+
+  guru        Guru         @relation(fields: [guruId], references: [id])
+  tahun       TahunAjaran  @relation(fields: [tahunAjaranId], references: [id])
+  absensi     Absensi[]
+}
+
+model Absensi {
+  id            Int @id @default(autoincrement())
+  siswaId       Int
+  sesiId        Int
+  status        StatusKehadiran
+
+  siswa     Siswa        @relation(fields: [siswaId], references: [id])
+  sesi      SesiAbsensi  @relation(fields: [sesiId], references: [id])
+}
+
+model Laporan {
+  id        Int @id @default(autoincrement())
+  guruId    Int
+  siswaId   Int
+  tanggal   DateTime
+  uraian    String
+
+  guru    Guru   @relation(fields: [guruId], references: [id])
+  siswa   Siswa  @relation(fields: [siswaId], references: [id])
+}
+
+model OrangTua {
+  id        Int @id @default(autoincrement())
+  siswaId   Int @unique
+  password  String
+  nama      String
+  email     String
+  noHp      String
+
+  siswa     Siswa @relation(fields: [siswaId], references: [id])
+}
+
+model IzinKehadiran {
+  id          Int @id @default(autoincrement())
+  siswaId     Int
+  mulai       DateTime
+  selesai     DateTime
+  status      StatusKehadiran
+  perihal     String
+  foto        String
+
+  siswa     Siswa @relation(fields: [siswaId], references: [id])
+}
+
+model Periode {
+  id              Int @id @default(autoincrement())
+  tahunAjaranId   Int
+  mulai           DateTime
+  selesai         DateTime
+
+  tahun       TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
+  evaluasi    Evaluasi[]
+}
+
+model Evaluasi {
+  id          Int @id @default(autoincrement())
+  periodeId   Int
+  tipe        String
+  kritik      Int
+  skor        Int
+  tanggal     DateTime
+
+  periode   Periode @relation(fields: [periodeId], references: [id])
+}
