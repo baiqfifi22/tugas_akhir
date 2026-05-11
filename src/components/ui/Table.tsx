@@ -26,8 +26,8 @@ export function Tr({ children, className = "" }: { children: React.ReactNode, cl
   return <tr className={`hover:bg-zinc-50 transition-colors bg-white ${className}`}>{children}</tr>;
 }
 
-export function Td({ children, className = "" }: { children: React.ReactNode, className?: string }) {
-  return <td className={`px-6 py-4 ${className}`}>{children}</td>;
+export function Td({ children, className = "", colSpan }: { children: React.ReactNode, className?: string, colSpan?: number }) {
+  return <td colSpan={colSpan} className={`px-6 py-4 ${className}`}>{children}</td>;
 }
 
 export function Checkbox({ checked, onChange, disabled }: { checked?: boolean; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void, disabled?: boolean }) {

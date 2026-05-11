@@ -13,12 +13,21 @@ export default function ClassRekap() {
 
   const [dateFilter, setDateFilter] = useState("");
 
-  const summaryData = [
-    { name: "Ahmad Budi", mon: "H", tue: "H", wed: "H", thu: "I", fri: "H" },
-    { name: "Siti Aminah", mon: "H", tue: "H", wed: "H", thu: "H", fri: "H" },
-    { name: "Rina Kusuma", mon: "S", tue: "H", wed: "H", thu: "H", fri: "H" },
-    { name: "Deni Hidayat", mon: "H", tue: "H", wed: "A", thu: "H", fri: "H" }
-  ];
+  interface SummaryData {
+    name: string;
+    mon: string;
+    tue: string;
+    wed: string;
+    thu: string;
+    fri: string;
+  }
+
+  const [summaryData, setSummaryData] = useState<SummaryData[]>([]);
+
+  // TODO: Ambil data rekap dari database
+  React.useEffect(() => {
+    // fetchSummary();
+  }, []);
 
   const getStatusColor = (status: string) => {
     if (status === "H") return "text-emerald-600 bg-emerald-50";

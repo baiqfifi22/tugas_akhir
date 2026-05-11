@@ -3,44 +3,13 @@ import { Layout } from "@/components/Layout";
 import { Card } from "@/components/ui/Card";
 import { TrendingUp, TrendingDown, Award, AlertTriangle, BarChart2 } from "lucide-react";
 
-// ─── Mock data ───────────────────────────────────────────────────────────────
-const CLASSES = ["10-A", "10-B", "11 IPA", "11 IPS", "12-A"];
+// ─── Dummy data dihapus, diubah menjadi state ──────────────────────────────────
+interface ClassData {
+  hadir: number;
+  total: number;
+}
 
-const DATA_BY_PERIOD: Record<
-  string,
-  Record<string, { hadir: number; total: number }>
-> = {
-  "2026-01": {
-    "10-A": { hadir: 620, total: 640 },
-    "10-B": { hadir: 570, total: 600 },
-    "11 IPA": { hadir: 500, total: 560 },
-    "11 IPS": { hadir: 590, total: 600 },
-    "12-A": { hadir: 640, total: 640 },
-  },
-  "2026-02": {
-    "10-A": { hadir: 560, total: 580 },
-    "10-B": { hadir: 520, total: 560 },
-    "11 IPA": { hadir: 480, total: 520 },
-    "11 IPS": { hadir: 550, total: 560 },
-    "12-A": { hadir: 575, total: 580 },
-  },
-  "2026-03": {
-    "10-A": { hadir: 590, total: 620 },
-    "10-B": { hadir: 540, total: 580 },
-    "11 IPA": { hadir: 510, total: 560 },
-    "11 IPS": { hadir: 570, total: 580 },
-    "12-A": { hadir: 615, total: 620 },
-  },
-  "2026-04": {
-    "10-A": { hadir: 300, total: 320 },
-    "10-B": { hadir: 280, total: 300 },
-    "11 IPA": { hadir: 250, total: 280 },
-    "11 IPS": { hadir: 290, total: 300 },
-    "12-A": { hadir: 320, total: 320 },
-  },
-};
-
-const ALL_MONTHS = Object.keys(DATA_BY_PERIOD);
+type DataByPeriod = Record<string, Record<string, ClassData>>;
 
 // semester 1 = jan–jun, semester 2 = jul–des
 const SEMESTER_MAP: Record<string, string[]> = {
@@ -89,23 +58,29 @@ const DOT_COLORS = [
 export default function PrincipalAttendanceAnalysis() {
   const [filterType, setFilterType] = useState<"bulan" | "semester">("bulan");
   const [selectedMonth, setSelectedMonth] = useState("2026-04");
-  const [selectedSemester, setSelectedSemester] = useState(
-    "Semester 1 (Jan–Jun)"
-  );
+  const [selectedSemester, setSelectedSemester] = useState("Semester 1 (Jan–Jun)");
+
+  const [classes, setClasses] = useState<string[]>([]);
+  const [dataByPeriod, setDataByPeriod] = useState<DataByPeriod>({});
+  const [allMonths, setAllMonths] = useState<string[]>([]);
+
+  React.useEffect(() => {
+    // TODO: fetch attendance data (classes, dataByPeriod, and allMonths) dari database
+  }, []);
 
   // ── Resolving active months ──────────────────────────────────────────────
   const activeMonths =
     filterType === "bulan"
       ? [selectedMonth]
-      : SEMESTER_MAP[selectedSemester] ?? ALL_MONTHS;
+      : SEMESTER_MAP[selectedSemester] ?? allMonths;
 
   // ── Grafik 1: per kelas (aggregated over active months) ─────────────────
   const classPct: Record<string, number> = {};
-  CLASSES.forEach((cls) => {
+  classes.forEach((cls) => {
     let totalHadir = 0,
       totalSiswa = 0;
     activeMonths.forEach((m) => {
-      const d = DATA_BY_PERIOD[m]?.[cls];
+      const d = dataByPeriod[m]?.[cls];
       if (d) {
         totalHadir += d.hadir;
         totalSiswa += d.total;
@@ -118,8 +93,8 @@ export default function PrincipalAttendanceAnalysis() {
   // average pct across all classes per month
   const monthlyAvg: { label: string; pct: number }[] = activeMonths.map(
     (m) => {
-      const vals = CLASSES.map((cls) => {
-        const d = DATA_BY_PERIOD[m]?.[cls];
+      const vals = classes.map((cls) => {
+        const d = dataByPeriod[m]?.[cls];
         return d ? getPct(d.hadir, d.total) : 0;
       });
       const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
@@ -128,7 +103,7 @@ export default function PrincipalAttendanceAnalysis() {
   );
 
   // ── Summary ──────────────────────────────────────────────────────────────
-  const sortedClasses = [...CLASSES].sort(
+  const sortedClasses = [...classes].sort(
     (a, b) => classPct[b] - classPct[a]
   );
   const highest = sortedClasses[0];
@@ -177,9 +152,9 @@ export default function PrincipalAttendanceAnalysis() {
             onChange={(e) => setSelectedMonth(e.target.value)}
             className="border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
           >
-            {ALL_MONTHS.map((m) => (
+            {allMonths.map((m) => (
               <option key={m} value={m}>
-                {MONTH_LABEL[m]} 2026
+                {MONTH_LABEL[m] || m} 2026
               </option>
             ))}
           </select>
@@ -216,7 +191,9 @@ export default function PrincipalAttendanceAnalysis() {
               ))}
             </div>
             <div className="flex-1 flex items-end gap-3 h-full pl-8">
-              {CLASSES.map((cls, idx) => {
+              {classes.length === 0 ? (
+                <div className="w-full text-center text-sm text-zinc-400 self-center">Belum ada data</div>
+              ) : classes.map((cls, idx) => {
                 const pct = classPct[cls];
                 return (
                   <div
@@ -293,7 +270,9 @@ export default function PrincipalAttendanceAnalysis() {
       {/* Legenda kelas */}
       <Card className="mb-8 p-4">
         <div className="flex flex-wrap gap-4">
-          {CLASSES.map((cls, idx) => (
+          {classes.length === 0 ? (
+            <span className="text-sm text-zinc-400">Belum ada kelas</span>
+          ) : classes.map((cls, idx) => (
             <div key={cls} className="flex items-center gap-2 text-sm text-zinc-600">
               <span
                 className={`inline-block w-3 h-3 rounded-sm ${DOT_COLORS[idx % DOT_COLORS.length]}`}
@@ -306,42 +285,46 @@ export default function PrincipalAttendanceAnalysis() {
 
       {/* Ringkasan */}
       <h2 className="text-lg font-bold text-zinc-900 mb-4">Ringkasan</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <Card className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <Award size={24} />
-          </div>
-          <div>
-            <p className="text-sm text-zinc-500 font-medium">
-              Kehadiran Tertinggi
-            </p>
-            <h3 className="text-xl font-bold text-zinc-900">
-              Kelas {highest}
-            </h3>
-            <p className="text-sm text-emerald-600 font-semibold flex items-center gap-1">
-              <TrendingUp size={14} />
-              {classPct[highest]}% kehadiran
-            </p>
-          </div>
-        </Card>
-        <Card className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center shrink-0">
-            <AlertTriangle size={24} />
-          </div>
-          <div>
-            <p className="text-sm text-zinc-500 font-medium">
-              Kehadiran Terendah
-            </p>
-            <h3 className="text-xl font-bold text-zinc-900">
-              Kelas {lowest}
-            </h3>
-            <p className="text-sm text-red-500 font-semibold flex items-center gap-1">
-              <TrendingDown size={14} />
-              {classPct[lowest]}% kehadiran
-            </p>
-          </div>
-        </Card>
-      </div>
+      {classes.length === 0 ? (
+        <Card className="text-center py-6 text-zinc-500">Belum ada ringkasan</Card>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <Card className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <Award size={24} />
+            </div>
+            <div>
+              <p className="text-sm text-zinc-500 font-medium">
+                Kehadiran Tertinggi
+              </p>
+              <h3 className="text-xl font-bold text-zinc-900">
+                Kelas {highest}
+              </h3>
+              <p className="text-sm text-emerald-600 font-semibold flex items-center gap-1">
+                <TrendingUp size={14} />
+                {classPct[highest] || 0}% kehadiran
+              </p>
+            </div>
+          </Card>
+          <Card className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center shrink-0">
+              <AlertTriangle size={24} />
+            </div>
+            <div>
+              <p className="text-sm text-zinc-500 font-medium">
+                Kehadiran Terendah
+              </p>
+              <h3 className="text-xl font-bold text-zinc-900">
+                Kelas {lowest}
+              </h3>
+              <p className="text-sm text-red-500 font-semibold flex items-center gap-1">
+                <TrendingDown size={14} />
+                {classPct[lowest] || 0}% kehadiran
+              </p>
+            </div>
+          </Card>
+        </div>
+      )}
     </Layout>
   );
 }

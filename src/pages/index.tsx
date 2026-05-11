@@ -10,14 +10,36 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [focus, setFocus] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Dummy routing by username
-    const lower = username.toLowerCase();
-    if (lower.includes("admin")) router.push("/admin");
-    else if (lower.includes("kepsek") || lower.includes("principal")) router.push("/principal");
-    else if (lower.includes("ortu") || lower.includes("parent")) router.push("/parent");
-    else router.push("/teacher");
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        // Redirect directly, session is now handled by HttpOnly cookies
+        router.push(data.redirect);
+      } else {
+        setError(data.message || "Gagal login. Periksa kembali username & password Anda.");
+      }
+    } catch (err) {
+      setError("Terjadi kesalahan pada server. Silakan coba lagi.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -62,10 +84,9 @@ export default function Home() {
               onFocus={() => setFocus("username")}
               onBlur={() => setFocus("")}
               className={`w-full px-4 py-2 rounded-xl border transition-all duration-300 outline-none text-gray-500
-                ${
-                  focus === "username"
-                    ? "border-green-400 shadow-md"
-                    : "border-gray-300"
+                ${focus === "username"
+                  ? "border-green-400 shadow-md"
+                  : "border-gray-300"
                 }`}
             />
           </div>
@@ -81,43 +102,47 @@ export default function Home() {
               onFocus={() => setFocus("password")}
               onBlur={() => setFocus("")}
               className={`w-full px-4 py-2 rounded-xl border transition-all duration-300 outline-none text-gray-500
-                ${
-                  focus === "password"
-                    ? "border-orange-400 shadow-md"
-                    : "border-gray-300"
+                ${focus === "password"
+                  ? "border-orange-400 shadow-md"
+                  : "border-gray-300"
                 }`}
             />
           </div>
 
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 text-red-600 text-sm rounded-xl text-center">
+              {error}
+            </div>
+          )}
+
           {/* BUTTON */}
-          <button type="submit" className="w-full py-2 rounded-xl bg-gradient-to-r from-orange-300 via-yellow-300 text-gray-700 font-semibold shadow-md hover:scale-105 transition-all duration-300">
-            Login
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-2 rounded-xl bg-gradient-to-r from-orange-300 via-yellow-300 text-gray-700 font-semibold shadow-md transition-all duration-300 ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+          >
+            {loading ? "Memproses..." : "Login"}
           </button>
 
           {/* TEXT TAMBAHAN */}
           <p className="text-xs text-gray-400 text-center mt-4">
             Sistem absensi pintar & interaktif ✨
           </p>
+          <p className="text-xs text-gray-400 text-center mt-4">
+            guru : nip=12345 & password=guru123
+          </p>
+          <p className="text-xs text-gray-400 text-center mt-4">
+            orang tua : nis=f1d022037 & password=orangtua123
+          </p>
+          <p className="text-xs text-gray-400 text-center mt-4">
+            admin : username=admin & password=admin123
+          </p>
+          <p className="text-xs text-gray-400 text-center mt-4">
+            kepsek : nip=12345kepsek & password=kepsek12345c
+          </p>
         </form>
 
-        {/* Quick Access (Demo) */}
-        <div className="mt-8 w-full max-w-sm">
-          <p className="text-xs text-gray-400 text-center mb-3">Demo — Akses Cepat Berdasarkan Role:</p>
-          <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => router.push("/teacher")} className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-zinc-200 bg-white text-sm text-zinc-700 hover:bg-zinc-50 hover:shadow-sm transition-all">
-              <BookOpen size={16} className="text-blue-600" /> Guru
-            </button>
-            <button onClick={() => router.push("/admin")} className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-zinc-200 bg-white text-sm text-zinc-700 hover:bg-zinc-50 hover:shadow-sm transition-all">
-              <UserCog size={16} className="text-emerald-600" /> Admin
-            </button>
-            <button onClick={() => router.push("/principal")} className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-zinc-200 bg-white text-sm text-zinc-700 hover:bg-zinc-50 hover:shadow-sm transition-all">
-              <Shield size={16} className="text-yellow-600" /> Kepala Sekolah
-            </button>
-            <button onClick={() => router.push("/parent")} className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-zinc-200 bg-white text-sm text-zinc-700 hover:bg-zinc-50 hover:shadow-sm transition-all">
-              <Users size={16} className="text-red-500" /> Orang Tua
-            </button>
-          </div>
-        </div>
+
       </div>
     </div>
   );

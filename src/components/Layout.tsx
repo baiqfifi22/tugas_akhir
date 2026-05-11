@@ -46,12 +46,12 @@ const ROLE_CONFIG = {
     ],
   },
   teacher: {
-    name: "Budi Santoso",
-    subtitle: "Guru Tetap",
-    initials: "BS",
-    fullName: "Budi Santoso, S.Pd",
-    nip: "198503152010011023",
-    email: "budi.santoso@sekolah.sch.id",
+    name: "Guru",
+    subtitle: "Pengajar",
+    initials: "G",
+    fullName: "Guru",
+    nip: "—",
+    email: "—",
     headerLabel: "Portal Akademik Guru",
     sidebarLabel: "Menu Kelas",
     homePath: "/teacher",
@@ -138,7 +138,60 @@ export function Layout({
   customNavItems,
 }: LayoutProps) {
   const router = useRouter();
-  const config = ROLE_CONFIG[role];
+  
+  // State untuk menyimpan data guru dinamis
+  const [dynamicTeacher, setDynamicTeacher] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    if (role === "teacher") {
+      // Prioritaskan cookie untuk respons instan
+      if (typeof document !== "undefined") {
+        const match = document.cookie.match(new RegExp("(^| )userName=([^;]+)"));
+        if (match && match[2]) {
+          const name = decodeURIComponent(match[2]);
+          if (isMounted) setDynamicTeacher({ name, nip: "—" });
+        }
+      }
+      
+      // Ambil data asli dari API untuk melengkapi NIP dsb.
+      const fetchMe = async () => {
+        try {
+          const res = await fetch("/api/teacher/me");
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.teacher && isMounted) {
+              setDynamicTeacher(data.teacher);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to fetch teacher for layout", error);
+        }
+      };
+      fetchMe();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [role]);
+
+  let config = { ...ROLE_CONFIG[role] };
+  
+  // Override config dengan data dinamis jika ada
+  if (role === "teacher" && dynamicTeacher) {
+    config.name = dynamicTeacher.name;
+    config.fullName = dynamicTeacher.name;
+    config.nip = dynamicTeacher.nip;
+    
+    // Generate inisial (misal: Budi Santoso -> BS)
+    const words = dynamicTeacher.name.split(" ");
+    if (words.length > 1) {
+      config.initials = (words[0][0] + words[1][0]).toUpperCase();
+    } else {
+      config.initials = dynamicTeacher.name.substring(0, 2).toUpperCase();
+    }
+  }
+
   const classId =
     typeof router.query.id === "string" ? router.query.id : "10-a";
   let navItems: NavItem[] = customNavItems || [];

@@ -6,17 +6,25 @@ import { TableWrapper, Thead, Th, Tbody, Tr, Td } from "@/components/ui/Table";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Download, Calendar, Eye } from "lucide-react";
 
-const MOCK_DATA = [
-  { date: "14 Apr 2026", cls: "10-A", teacher: "Budi Santoso", total: 32, hadir: 30, sakit: 1, izin: 1, alpa: 0, status: "Submitted" },
-  { date: "14 Apr 2026", cls: "10-B", teacher: "Siti Rahma", total: 30, hadir: 28, sakit: 0, izin: 1, alpa: 1, status: "Submitted" },
-  { date: "14 Apr 2026", cls: "11 IPA", teacher: "Ahmad Dahlan", total: 28, hadir: 25, sakit: 2, izin: 0, alpa: 1, status: "Draft" },
-  { date: "13 Apr 2026", cls: "10-A", teacher: "Budi Santoso", total: 32, hadir: 31, sakit: 1, izin: 0, alpa: 0, status: "Submitted" },
-  { date: "13 Apr 2026", cls: "10-B", teacher: "Siti Rahma", total: 30, hadir: 30, sakit: 0, izin: 0, alpa: 0, status: "Submitted" },
-  { date: "13 Apr 2026", cls: "11 IPA", teacher: "Ahmad Dahlan", total: 28, hadir: 26, sakit: 1, izin: 1, alpa: 0, status: "Submitted" },
-];
+interface AttendanceSummary {
+  date: string;
+  cls: string;
+  teacher: string;
+  total: number;
+  hadir: number;
+  sakit: number;
+  izin: number;
+  alpa: number;
+  status: string;
+}
 
 export default function AdminAttendance() {
   const [dateFilter, setDateFilter] = useState("");
+  const [attendanceData, setAttendanceData] = useState<AttendanceSummary[]>([]);
+
+  React.useEffect(() => {
+    // TODO: fetch attendance data dari API/Database
+  }, [dateFilter]);
 
   return (
     <Layout role="admin">
@@ -59,28 +67,36 @@ export default function AdminAttendance() {
             </Tr>
           </Thead>
           <Tbody>
-            {MOCK_DATA.map((row, idx) => (
-              <Tr key={idx}>
-                <Td className="text-zinc-500">{row.date}</Td>
-                <Td className="font-medium text-zinc-900">{row.cls}</Td>
-                <Td className="text-zinc-600">{row.teacher}</Td>
-                <Td className="text-center font-medium text-emerald-600">{row.hadir}</Td>
-                <Td className="text-center text-yellow-600">{row.sakit}</Td>
-                <Td className="text-center text-blue-600">{row.izin}</Td>
-                <Td className="text-center text-red-600">{row.alpa}</Td>
-                <Td>
-                  <StatusBadge
-                    status={row.status === "Submitted" ? "active" : "inactive"}
-                    label={row.status === "Submitted" ? "Disimpan" : "Draft"}
-                  />
-                </Td>
-                <Td className="text-right">
-                  <button className="text-zinc-400 hover:text-zinc-600 transition-colors p-1 rounded-md hover:bg-zinc-100 inline-flex">
-                    <Eye size={18} />
-                  </button>
+            {attendanceData.length === 0 ? (
+              <Tr>
+                <Td colSpan={9} className="text-center py-6 text-zinc-500">
+                  Belum ada data absensi yang tersedia.
                 </Td>
               </Tr>
-            ))}
+            ) : (
+              attendanceData.map((row, idx) => (
+                <Tr key={idx}>
+                  <Td className="text-zinc-500">{row.date}</Td>
+                  <Td className="font-medium text-zinc-900">{row.cls}</Td>
+                  <Td className="text-zinc-600">{row.teacher}</Td>
+                  <Td className="text-center font-medium text-emerald-600">{row.hadir}</Td>
+                  <Td className="text-center text-yellow-600">{row.sakit}</Td>
+                  <Td className="text-center text-blue-600">{row.izin}</Td>
+                  <Td className="text-center text-red-600">{row.alpa}</Td>
+                  <Td>
+                    <StatusBadge
+                      status={row.status === "Submitted" ? "active" : "inactive"}
+                      label={row.status === "Submitted" ? "Disimpan" : "Draft"}
+                    />
+                  </Td>
+                  <Td className="text-right">
+                    <button className="text-zinc-400 hover:text-zinc-600 transition-colors p-1 rounded-md hover:bg-zinc-100 inline-flex">
+                      <Eye size={18} />
+                    </button>
+                  </Td>
+                </Tr>
+              ))
+            )}
           </Tbody>
         </TableWrapper>
       </Card>

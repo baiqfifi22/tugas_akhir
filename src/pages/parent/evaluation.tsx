@@ -4,37 +4,26 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Star, School, User, BookOpen, CheckCircle2 } from "lucide-react";
 
-const EVALUATION_SECTIONS = [
-  {
-    id: "school",
-    title: "Evaluasi Sekolah",
-    description: "Penilaian terhadap fasilitas, pelayanan, dan lingkungan sekolah MI Integral Buah Hati Insani.",
-    icon: School,
-    color: "text-blue-600",
-    bg: "bg-blue-100",
-  },
-  {
-    id: "homeroom",
-    title: "Evaluasi Wali Kelas",
-    description: "Penilaian terhadap Bpk. Budi Santoso, S.Pd selaku wali kelas 10-A.",
-    icon: User,
-    color: "text-emerald-600",
-    bg: "bg-emerald-100",
-  },
-  {
-    id: "religion",
-    title: "Evaluasi Guru Agama",
-    description: "Penilaian terhadap metode dan penyampaian materi agama.",
-    icon: BookOpen,
-    color: "text-purple-600",
-    bg: "bg-purple-100",
-  },
-];
+import { LucideIcon } from "lucide-react";
+
+interface EvaluationSection {
+  id: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  color: string;
+  bg: string;
+}
 
 export default function ParentEvaluation() {
+  const [evaluationSections, setEvaluationSections] = useState<EvaluationSection[]>([]);
   const [ratings, setRatings] = useState<Record<string, number>>({});
   const [comments, setComments] = useState<Record<string, string>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  React.useEffect(() => {
+    // TODO: fetch data evaluasi (siapa wali kelasnya, guru agamanya) dari database
+  }, []);
 
   const handleRating = (sectionId: string, value: number) => {
     setRatings((prev) => ({ ...prev, [sectionId]: value }));
@@ -48,7 +37,7 @@ export default function ParentEvaluation() {
     e.preventDefault();
     
     // Validasi: Pastikan semua section sudah diberi rating
-    const allRated = EVALUATION_SECTIONS.every((sec) => ratings[sec.id]);
+    const allRated = evaluationSections.length > 0 && evaluationSections.every((sec) => ratings[sec.id]);
     if (!allRated) {
       alert("Mohon berikan rating (bintang) untuk semua bagian evaluasi.");
       return;
@@ -86,8 +75,13 @@ export default function ParentEvaluation() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl">
-        {EVALUATION_SECTIONS.map((section) => (
-          <Card key={section.id} className="overflow-hidden border-t-0 p-0">
+        {evaluationSections.length === 0 ? (
+          <div className="text-center py-12 text-zinc-500 bg-white border border-zinc-200 rounded-2xl">
+            Belum ada form evaluasi untuk saat ini.
+          </div>
+        ) : (
+          evaluationSections.map((section) => (
+            <Card key={section.id} className="overflow-hidden border-t-0 p-0">
             <div className={`h-2 w-full ${section.bg.replace('100', '500')}`} />
             <div className="p-6">
               <div className="flex items-start gap-4 mb-6">
@@ -144,7 +138,7 @@ export default function ParentEvaluation() {
               </div>
             </div>
           </Card>
-        ))}
+        )))}
 
         <div className="flex justify-end pt-4 pb-8">
           <Button type="submit" variant="primary" className="px-8 py-3 text-base shadow-lg shadow-blue-500/20">

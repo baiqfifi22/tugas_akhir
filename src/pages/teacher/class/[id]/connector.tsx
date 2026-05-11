@@ -5,15 +5,12 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { User, Calendar, FileText, Plus, CheckCircle2, Search } from "lucide-react";
 
-// Mock Data
-const CLASS_STUDENTS = [
-  { id: "1", name: "Ahmad Budi", nis: "1001", avatar: "AB" },
-  { id: "2", name: "Siti Aminah", nis: "1002", avatar: "SA" },
-  { id: "3", name: "Rina Kusuma", nis: "1003", avatar: "RK" },
-  { id: "4", name: "Deni Hidayat", nis: "1004", avatar: "DH" },
-  { id: "5", name: "Budi Santoso Jr.", nis: "1005", avatar: "BS" },
-  { id: "6", name: "Fitri Handayani", nis: "1006", avatar: "FH" },
-];
+interface Student {
+  id: string;
+  name: string;
+  nis: string;
+  avatar: string;
+}
 
 const MONTHS = [
   "Januari 2026", "Februari 2026", "Maret 2026", 
@@ -28,30 +25,14 @@ interface Report {
   createdAt: string;
 }
 
-const INITIAL_REPORTS: Report[] = [
-  {
-    id: "r1",
-    studentId: "1",
-    period: "Maret 2026",
-    notes: "Ahmad menunjukkan perkembangan yang sangat baik dalam pelajaran Matematika. Aktif bertanya dan mulai membantu teman-temannya.",
-    createdAt: "28 Mar 2026",
-  },
-  {
-    id: "r2",
-    studentId: "4",
-    period: "Maret 2026",
-    notes: "Deni cukup aktif namun masih perlu bimbingan lebih dalam memahami materi. Kehadiran bulan ini perlu ditingkatkan karena ada beberapa kali tidak hadir tanpa keterangan.",
-    createdAt: "28 Mar 2026",
-  },
-];
-
 export default function TeacherConnector() {
   const router = useRouter();
   const classId = typeof router.query.id === "string" ? router.query.id.toUpperCase() : "10-A";
 
-  const [reports, setReports] = useState<Report[]>(INITIAL_REPORTS);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedStudentId, setSelectedStudentId] = useState<string>(CLASS_STUDENTS[0].id);
+  const [selectedStudentId, setSelectedStudentId] = useState<string>("");
   
   // Form State
   const [isAdding, setIsAdding] = useState(false);
@@ -59,12 +40,18 @@ export default function TeacherConnector() {
   const [notes, setNotes] = useState("");
   const [isSaved, setIsSaved] = useState(false);
 
-  const filteredStudents = CLASS_STUDENTS.filter(s => 
+  // TODO: Ambil data students dan reports dari database berdasarkan classId
+  React.useEffect(() => {
+    // fetchStudents();
+    // fetchReports();
+  }, [classId]);
+
+  const filteredStudents = students.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     s.nis.includes(searchQuery)
   );
 
-  const selectedStudent = CLASS_STUDENTS.find(s => s.id === selectedStudentId);
+  const selectedStudent = students.find(s => s.id === selectedStudentId);
   const studentReports = reports.filter(r => r.studentId === selectedStudentId);
 
   const handleSave = (e: React.FormEvent) => {

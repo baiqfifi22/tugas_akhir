@@ -4,32 +4,35 @@ import { Card } from "@/components/ui/Card";
 import { TableWrapper, Thead, Th, Tbody, Tr, Td } from "@/components/ui/Table";
 import { Calendar, UserCheck, UserX, Clock, CalendarDays, FileText, User } from "lucide-react";
 
-// Mock Data
-const MOCK_DATA = [
-  { date: "14 Apr 2026", day: "Senin", status: "Hadir", note: "—" },
-  { date: "13 Apr 2026", day: "Jumat", status: "Hadir", note: "—" },
-  { date: "12 Apr 2026", day: "Kamis", status: "Sakit", note: "Demam" },
-  { date: "11 Apr 2026", day: "Rabu", status: "Hadir", note: "—" },
-  { date: "10 Apr 2026", day: "Selasa", status: "Hadir", note: "—" },
-  { date: "9 Apr 2026", day: "Senin", status: "Izin", note: "Acara keluarga" },
-  { date: "8 Apr 2026", day: "Jumat", status: "Hadir", note: "—" },
-];
+interface AttendanceData {
+  date: string;
+  day: string;
+  status: string;
+  note: string;
+}
 
-const MOCK_MONTHLY_STATS = {
-  hadir: 20,
-  sakit: 1,
-  izin: 1,
-  alpa: 0,
-};
+interface MonthlyStats {
+  hadir: number;
+  sakit: number;
+  izin: number;
+  alpa: number;
+}
 
-const MOCK_NARRATIVE_REPORT = {
-  period: "April 2026",
-  teacher: "Budi Santoso, S.Pd",
-  notes: "Deni menunjukkan peningkatan kedisiplinan yang baik bulan ini. Partisipasi di kelas juga semakin aktif. Mohon untuk tetap menjaga kesehatan agar kehadiran tetap optimal."
-};
+interface NarrativeReport {
+  period: string;
+  teacher: string;
+  notes: string;
+}
 
 export default function ParentAttendance() {
   const [monthFilter, setMonthFilter] = useState("2026-04");
+  const [attendanceData, setAttendanceData] = useState<AttendanceData[]>([]);
+  const [stats, setStats] = useState<MonthlyStats>({ hadir: 0, sakit: 0, izin: 0, alpa: 0 });
+  const [report, setReport] = useState<NarrativeReport | null>(null);
+
+  React.useEffect(() => {
+    // TODO: fetch attendance data, stats, and narrative report
+  }, [monthFilter]);
 
   const getStatusStyle = (status: string) => {
     if (status === "Hadir") return "bg-emerald-100 text-emerald-800";
@@ -69,7 +72,7 @@ export default function ParentAttendance() {
             </div>
             <div>
               <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Hadir</p>
-              <h3 className="text-2xl font-black text-zinc-900">{MOCK_MONTHLY_STATS.hadir}</h3>
+              <h3 className="text-2xl font-black text-zinc-900">{stats.hadir}</h3>
             </div>
           </div>
         </Card>
@@ -80,7 +83,7 @@ export default function ParentAttendance() {
             </div>
             <div>
               <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Sakit</p>
-              <h3 className="text-2xl font-black text-zinc-900">{MOCK_MONTHLY_STATS.sakit}</h3>
+              <h3 className="text-2xl font-black text-zinc-900">{stats.sakit}</h3>
             </div>
           </div>
         </Card>
@@ -91,7 +94,7 @@ export default function ParentAttendance() {
             </div>
             <div>
               <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Izin</p>
-              <h3 className="text-2xl font-black text-zinc-900">{MOCK_MONTHLY_STATS.izin}</h3>
+              <h3 className="text-2xl font-black text-zinc-900">{stats.izin}</h3>
             </div>
           </div>
         </Card>
@@ -102,7 +105,7 @@ export default function ParentAttendance() {
             </div>
             <div>
               <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Alpa</p>
-              <h3 className="text-2xl font-black text-zinc-900">{MOCK_MONTHLY_STATS.alpa}</h3>
+              <h3 className="text-2xl font-black text-zinc-900">{stats.alpa}</h3>
             </div>
           </div>
         </Card>
@@ -125,18 +128,24 @@ export default function ParentAttendance() {
                 </Tr>
               </Thead>
               <Tbody>
-                {MOCK_DATA.map((row, idx) => (
-                  <Tr key={idx}>
-                    <Td className="text-zinc-500">{row.date}</Td>
-                    <Td className="font-medium text-zinc-900">{row.day}</Td>
-                    <Td>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${getStatusStyle(row.status)}`}>
-                        {row.status}
-                      </span>
-                    </Td>
-                    <Td className="text-zinc-500">{row.note}</Td>
+                {attendanceData.length === 0 ? (
+                  <Tr>
+                    <Td colSpan={4} className="text-center py-6 text-zinc-500">Belum ada data kehadiran bulan ini.</Td>
                   </Tr>
-                ))}
+                ) : (
+                  attendanceData.map((row, idx) => (
+                    <Tr key={idx}>
+                      <Td className="text-zinc-500">{row.date}</Td>
+                      <Td className="font-medium text-zinc-900">{row.day}</Td>
+                      <Td>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${getStatusStyle(row.status)}`}>
+                          {row.status}
+                        </span>
+                      </Td>
+                      <Td className="text-zinc-500">{row.note}</Td>
+                    </Tr>
+                  ))
+                )}
               </Tbody>
             </TableWrapper>
           </Card>
@@ -145,32 +154,41 @@ export default function ParentAttendance() {
         {/* Narrative Report */}
         <div className="lg:col-span-1">
           <Card className="h-full bg-gradient-to-br from-blue-50 to-white border-blue-100">
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-blue-100/50">
-              <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-sm">
-                <FileText size={20} />
+            {report ? (
+              <>
+                <div className="flex items-center gap-3 mb-6 pb-4 border-b border-blue-100/50">
+                  <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-sm">
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-zinc-900 leading-tight">Laporan Perkembangan</h2>
+                    <p className="text-xs text-blue-600 font-medium uppercase tracking-wider">{report.period}</p>
+                  </div>
+                </div>
+                
+                <div className="relative">
+                  <span className="text-4xl text-blue-200 absolute -top-4 -left-2 font-serif">"</span>
+                  <p className="text-sm text-zinc-700 leading-relaxed relative z-10 pl-4 italic">
+                    {report.notes}
+                  </p>
+                </div>
+                
+                <div className="mt-8 pt-4 border-t border-zinc-100 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-zinc-200 flex items-center justify-center text-zinc-500">
+                    <User size={14} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-zinc-400 font-medium">Ditulis oleh Wali Kelas</p>
+                    <p className="text-sm font-bold text-zinc-900">{report.teacher}</p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-zinc-400 p-6 text-center">
+                <FileText size={40} className="mb-3 opacity-20" />
+                <p className="text-sm">Belum ada laporan perkembangan untuk bulan ini.</p>
               </div>
-              <div>
-                <h2 className="text-base font-bold text-zinc-900 leading-tight">Laporan Perkembangan</h2>
-                <p className="text-xs text-blue-600 font-medium uppercase tracking-wider">{MOCK_NARRATIVE_REPORT.period}</p>
-              </div>
-            </div>
-            
-            <div className="relative">
-              <span className="text-4xl text-blue-200 absolute -top-4 -left-2 font-serif">"</span>
-              <p className="text-sm text-zinc-700 leading-relaxed relative z-10 pl-4 italic">
-                {MOCK_NARRATIVE_REPORT.notes}
-              </p>
-            </div>
-            
-            <div className="mt-8 pt-4 border-t border-zinc-100 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-zinc-200 flex items-center justify-center text-zinc-500">
-                <User size={14} />
-              </div>
-              <div>
-                <p className="text-xs text-zinc-400 font-medium">Ditulis oleh Wali Kelas</p>
-                <p className="text-sm font-bold text-zinc-900">{MOCK_NARRATIVE_REPORT.teacher}</p>
-              </div>
-            </div>
+            )}
           </Card>
         </div>
       </div>

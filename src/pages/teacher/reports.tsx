@@ -10,25 +10,13 @@ import {
   User,
   ChevronDown,
 } from "lucide-react";
+import toast, { Toaster } from "react-hot-toast";
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const STUDENTS = [
-  { id: "1", name: "Ahmad Budi", class: "10-A" },
-  { id: "2", name: "Siti Aminah", class: "10-A" },
-  { id: "3", name: "Rina Kusuma", class: "10-A" },
-  { id: "4", name: "Deni Hidayat", class: "10-A" },
-  { id: "5", name: "Budi Santoso Jr.", class: "10-A" },
-  { id: "6", name: "Fitri Handayani", class: "10-A" },
-  { id: "7", name: "Raka Pratama", class: "10-A" },
-  { id: "8", name: "Anisa Putri", class: "10-A" },
-  { id: "9", name: "Wahyu Nugroho", class: "10-A" },
-  { id: "10", name: "Dewi Lestari", class: "10-A" },
-  { id: "11", name: "Farhan Maulana", class: "10-B" },
-  { id: "12", name: "Nadia Sari", class: "10-B" },
-  { id: "13", name: "Rizki Aditya", class: "11 IPA" },
-  { id: "14", name: "Laila Nuraini", class: "11 IPA" },
-  { id: "15", name: "Hendra Gunawan", class: "11 IPS" },
-];
+interface Student {
+  id: string;
+  name: string;
+  class: string;
+}
 
 const MONTHS = [
   "Januari 2026",
@@ -49,89 +37,86 @@ interface Report {
   createdAt: string;
 }
 
-const INITIAL_REPORTS: Report[] = [
-  {
-    id: "r1",
-    studentId: "1",
-    studentName: "Ahmad Budi",
-    studentClass: "10-A",
-    period: "Maret 2026",
-    notes:
-      "Ahmad menunjukkan perkembangan yang sangat baik dalam pelajaran Matematika. Aktif bertanya dan mulai membantu teman-temannya. Perlu terus didukung untuk meningkatkan kepercayaan diri.",
-    createdAt: "28 Mar 2026",
-  },
-  {
-    id: "r2",
-    studentId: "4",
-    studentName: "Deni Hidayat",
-    studentClass: "10-A",
-    period: "Maret 2026",
-    notes:
-      "Deni cukup aktif namun masih perlu bimbingan lebih dalam memahami materi. Kehadiran bulan ini perlu ditingkatkan karena ada beberapa kali tidak hadir tanpa keterangan.",
-    createdAt: "28 Mar 2026",
-  },
-  {
-    id: "r3",
-    studentId: "2",
-    studentName: "Siti Aminah",
-    studentClass: "10-A",
-    period: "April 2026",
-    notes:
-      "Siti mengalami peningkatan signifikan pada pemahaman materi bulan ini. Selalu hadir tepat waktu dan memiliki motivasi belajar yang tinggi.",
-    createdAt: "20 Apr 2026",
-  },
-];
-
 export default function TeacherReports() {
-  const [reports, setReports] = useState<Report[]>(INITIAL_REPORTS);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
   const [showForm, setShowForm] = useState(false);
 
   // Form state
   const [search, setSearch] = useState("");
-  const [selectedStudent, setSelectedStudent] = useState<
-    (typeof STUDENTS)[0] | null
-  >(null);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [period, setPeriod] = useState("");
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
 
-  const filteredStudents = STUDENTS.filter((s) =>
+  // Ambil data reports dan students dari API
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await fetch("/api/teacher/reports");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            setReports(data.reports);
+            setStudents(data.students);
+          }
+        }
+      } catch (error) {
+        toast.error("Gagal memuat data laporan");
+      }
+    };
+    fetchData();
+  }, []);
+
+  const filteredStudents = students.filter((s) =>
     s.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedStudent || !period || !notes.trim()) return;
 
-    const newReport: Report = {
-      id: `r${Date.now()}`,
-      studentId: selectedStudent.id,
-      studentName: selectedStudent.name,
-      studentClass: selectedStudent.class,
-      period,
-      notes: notes.trim(),
-      createdAt: new Date().toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }),
-    };
+    const loadingToast = toast.loading("Menyimpan laporan...");
+    try {
+      const res = await fetch("/api/teacher/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: selectedStudent.id,
+          period: period,
+          notes: notes.trim(),
+        }),
+      });
 
-    setReports((prev) => [newReport, ...prev]);
-    // Reset form
-    setSelectedStudent(null);
-    setSearch("");
-    setPeriod("");
-    setNotes("");
-    setShowForm(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success("Laporan berhasil disimpan!", { id: loadingToast });
+        
+        // Update local state by adding the newly returned report
+        const newReport = data.report;
+        newReport.studentClass = selectedStudent.class; // Inject class manually for immediate display
+        newReport.period = period; // Inject period manually
+        setReports((prev) => [newReport, ...prev]);
+        
+        // Reset form
+        setSelectedStudent(null);
+        setSearch("");
+        setPeriod("");
+        setNotes("");
+        setShowForm(false);
+      } else {
+        toast.error(data.message || "Gagal menyimpan laporan", { id: loadingToast });
+      }
+    } catch (error) {
+      toast.error("Terjadi kesalahan server", { id: loadingToast });
+    }
   };
 
   const isFormValid = selectedStudent && period && notes.trim().length > 0;
 
   return (
     <Layout role="teacher" hasSidebar={true}>
+      <Toaster position="top-right" />
       {/* Page Header */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -146,23 +131,12 @@ export default function TeacherReports() {
           variant="primary"
           onClick={() => {
             setShowForm(!showForm);
-            setSaved(false);
           }}
         >
           <Plus size={18} />
           {showForm ? "Tutup Form" : "Buat Laporan"}
         </Button>
       </div>
-
-      {/* Success Toast */}
-      {saved && (
-        <div className="mb-6 flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-800 px-5 py-3 rounded-xl text-sm font-medium">
-          <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs">
-            ✓
-          </div>
-          Laporan berhasil disimpan!
-        </div>
-      )}
 
       {/* Form Input */}
       {showForm && (

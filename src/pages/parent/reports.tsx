@@ -3,37 +3,28 @@ import { Layout } from "@/components/Layout";
 import { Card } from "@/components/ui/Card";
 import { BarChart2, BookOpen, Calendar, ChevronDown } from "lucide-react";
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const MOCK_MONTHLY = [
-  { month: "Jan", hadir: 20, sakit: 1, izin: 0, alpa: 0 },
-  { month: "Feb", hadir: 18, sakit: 2, izin: 1, alpa: 0 },
-  { month: "Mar", hadir: 21, sakit: 0, izin: 1, alpa: 0 },
-  { month: "Apr", hadir: 10, sakit: 1, izin: 0, alpa: 0 },
-];
+interface MonthlyAttendance {
+  month: string;
+  hadir: number;
+  sakit: number;
+  izin: number;
+  alpa: number;
+}
 
-const MOCK_REPORTS = [
-  {
-    id: "r1",
-    period: "Maret 2026",
-    notes:
-      "Deni menunjukkan perkembangan yang sangat baik dalam pelajaran Matematika. Aktif bertanya dan mulai membantu teman-temannya. Perlu terus didukung untuk meningkatkan kepercayaan diri.",
-  },
-  {
-    id: "r2",
-    period: "April 2026",
-    notes:
-      "Bulan ini Deni cukup aktif namun masih perlu bimbingan lebih dalam memahami materi. Kehadiran perlu ditingkatkan, ada beberapa hari tidak hadir tanpa keterangan.",
-  },
-  {
-    id: "r3",
-    period: "Februari 2026",
-    notes:
-      "Deni mulai menunjukkan minat pada pelajaran sains. Beberapa tugas belum dikumpulkan tepat waktu. Orang tua disarankan untuk lebih memantau jadwal belajar di rumah.",
-  },
-];
+interface ReportData {
+  id: string;
+  period: string;
+  notes: string;
+}
 
 export default function ParentReports() {
+  const [monthlyAttendance, setMonthlyAttendance] = useState<MonthlyAttendance[]>([]);
+  const [reports, setReports] = useState<ReportData[]>([]);
   const [expandedReport, setExpandedReport] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    // TODO: fetch data laporan bulanan dan laporan perkembangan anak dari database
+  }, []);
 
   return (
     <Layout role="parent">
@@ -53,68 +44,80 @@ export default function ParentReports() {
         <div className="absolute top-6 left-6 text-sm font-medium text-zinc-500">
           Jumlah Hari Kehadiran
         </div>
-        {MOCK_MONTHLY.map((m, idx) => {
-          const total = m.hadir + m.sakit + m.izin + m.alpa;
-          const pct = total > 0 ? Math.round((m.hadir / total) * 100) : 0;
-          return (
-            <div key={idx} className="flex-1 flex flex-col items-center gap-2">
-              <span className="text-xs font-bold text-blue-600">{pct}%</span>
-              <div
-                className="w-full bg-zinc-100 rounded-t-lg relative"
-                style={{ height: "100%" }}
-              >
+        {monthlyAttendance.length === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center text-zinc-400">
+            Belum ada data kehadiran.
+          </div>
+        ) : (
+          monthlyAttendance.map((m, idx) => {
+            const total = m.hadir + m.sakit + m.izin + m.alpa;
+            const pct = total > 0 ? Math.round((m.hadir / total) * 100) : 0;
+            return (
+              <div key={idx} className="flex-1 flex flex-col items-center gap-2 relative z-10">
+                <span className="text-xs font-bold text-blue-600">{pct}%</span>
                 <div
-                  className="absolute bottom-0 w-full bg-blue-500 hover:bg-blue-600 transition-colors rounded-t-lg"
-                  style={{ height: `${pct}%` }}
-                />
+                  className="w-full bg-zinc-100 rounded-t-lg relative"
+                  style={{ height: "100%" }}
+                >
+                  <div
+                    className="absolute bottom-0 w-full bg-blue-500 hover:bg-blue-600 transition-colors rounded-t-lg"
+                    style={{ height: `${pct}%` }}
+                  />
+                </div>
+                <span className="text-xs text-zinc-500 font-medium">{m.month}</span>
               </div>
-              <span className="text-xs text-zinc-500 font-medium">{m.month}</span>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </Card>
 
       {/* Detail Per Bulan */}
       <h2 className="text-lg font-bold text-zinc-900 mb-4">Detail Per Bulan</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-        {MOCK_MONTHLY.map((m, idx) => {
-          const total = m.hadir + m.sakit + m.izin + m.alpa;
-          return (
-            <Card key={idx}>
-              <h3 className="font-bold text-zinc-900 mb-4">{m.month} 2026</h3>
-              <div className="grid grid-cols-4 gap-4">
-                <div className="text-center">
-                  <p className="text-xs text-zinc-500">Hadir</p>
-                  <p className="text-lg font-bold text-emerald-600">{m.hadir}</p>
+        {monthlyAttendance.length === 0 ? (
+          <div className="col-span-1 md:col-span-2 text-center text-zinc-400 py-8 bg-white border border-zinc-200 rounded-2xl">
+            Belum ada detail bulan.
+          </div>
+        ) : (
+          monthlyAttendance.map((m, idx) => {
+            const total = m.hadir + m.sakit + m.izin + m.alpa;
+            return (
+              <Card key={idx}>
+                <h3 className="font-bold text-zinc-900 mb-4">{m.month}</h3>
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="text-center">
+                    <p className="text-xs text-zinc-500">Hadir</p>
+                    <p className="text-lg font-bold text-emerald-600">{m.hadir}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-zinc-500">Sakit</p>
+                    <p className="text-lg font-bold text-yellow-600">{m.sakit}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-zinc-500">Izin</p>
+                    <p className="text-lg font-bold text-blue-600">{m.izin}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-zinc-500">Alpa</p>
+                    <p className="text-lg font-bold text-red-600">{m.alpa}</p>
+                  </div>
                 </div>
-                <div className="text-center">
-                  <p className="text-xs text-zinc-500">Sakit</p>
-                  <p className="text-lg font-bold text-yellow-600">{m.sakit}</p>
+                {/* Mini progress bar */}
+                <div className="mt-4 h-2 bg-zinc-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all"
+                    style={{
+                      width: `${total > 0 ? (m.hadir / total) * 100 : 0}%`,
+                    }}
+                  />
                 </div>
-                <div className="text-center">
-                  <p className="text-xs text-zinc-500">Izin</p>
-                  <p className="text-lg font-bold text-blue-600">{m.izin}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-zinc-500">Alpa</p>
-                  <p className="text-lg font-bold text-red-600">{m.alpa}</p>
-                </div>
-              </div>
-              {/* Mini progress bar */}
-              <div className="mt-4 h-2 bg-zinc-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all"
-                  style={{
-                    width: `${total > 0 ? (m.hadir / total) * 100 : 0}%`,
-                  }}
-                />
-              </div>
-              <p className="text-xs text-zinc-500 mt-2">
-                Total {total} hari efektif
-              </p>
-            </Card>
-          );
-        })}
+                <p className="text-xs text-zinc-500 mt-2">
+                  Total {total} hari efektif
+                </p>
+              </Card>
+            );
+          })
+        )}
       </div>
 
       {/* ── Bagian 2: Laporan Perkembangan Siswa ─────────────────────────── */}
@@ -127,14 +130,14 @@ export default function ParentReports() {
           Catatan yang dikirimkan guru tentang perkembangan Deni Hidayat.
         </p>
 
-        {MOCK_REPORTS.length === 0 ? (
+        {reports.length === 0 ? (
           <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-zinc-400">
             <BookOpen size={36} className="mx-auto mb-3 opacity-25" />
             <p>Belum ada laporan dari guru.</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {MOCK_REPORTS.map((report) => {
+            {reports.map((report) => {
               const isOpen = expandedReport === report.id;
               return (
                 <Card

@@ -12,13 +12,13 @@ import {
   ClipboardCheck,
   BarChart2,
 } from "lucide-react";
+import toast, { Toaster } from "react-hot-toast";
 
-const MOCK_STUDENTS = [
-  { id: "S001", name: "Ahmad Budi", status: "" },
-  { id: "S002", name: "Siti Aminah", status: "" },
-  { id: "S003", name: "Rina Kusuma", status: "" },
-  { id: "S004", name: "Deni Hidayat", status: "" },
-];
+interface Student {
+  id: string;
+  name: string;
+  status: string;
+}
 
 export default function ClassAttendance() {
   const router = useRouter();
@@ -26,7 +26,7 @@ export default function ClassAttendance() {
   const classId = typeof id === "string" ? id : "10-a";
 
   const [isClient, setIsClient] = useState(false);
-  const [students, setStudents] = useState(MOCK_STUDENTS);
+  const [students, setStudents] = useState<Student[]>([]);
   const [date, setDate] = useState("");
   const [activity, setActivity] = useState("");
   const [saveState, setSaveState] = useState<"initial" | "saved" | "submitted">(
@@ -36,7 +36,26 @@ export default function ClassAttendance() {
   useEffect(() => {
     setIsClient(true);
     setDate(new Date().toISOString().split("T")[0]);
-  }, []);
+    
+    if (id) {
+      const fetchStudents = async () => {
+        try {
+          const res = await fetch(`/api/teacher/class/${id}/students`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success) {
+              setStudents(data.students);
+            }
+          } else {
+            toast.error("Gagal memuat daftar siswa");
+          }
+        } catch (error) {
+          toast.error("Terjadi kesalahan saat memuat data");
+        }
+      };
+      fetchStudents();
+    }
+  }, [id]);
 
   const handleStatusChange = (studentId: string, newStatus: string) => {
     setStudents(
@@ -51,16 +70,37 @@ export default function ClassAttendance() {
   };
 
   const handleSimpan = () => {
-    // Validasi form (dummy logic)
     if (students.some((s) => s.status === "")) {
-      alert("Mohon lengkapi status kehadiran semua siswa.");
+      toast.error("Mohon lengkapi status kehadiran semua siswa.");
       return;
     }
     setSaveState("saved");
   };
 
-  const handleSubmit = () => {
-    setSaveState("submitted");
+  const handleSubmit = async () => {
+    const loadingToast = toast.loading("Menyimpan absensi...");
+    try {
+      const res = await fetch("/api/teacher/attendance/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kelasId: id,
+          tanggal: date,
+          notes: activity,
+          students: students,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(data.message, { id: loadingToast });
+        setSaveState("submitted");
+      } else {
+        toast.error(data.message || "Gagal menyimpan absensi", { id: loadingToast });
+      }
+    } catch (error) {
+      toast.error("Terjadi kesalahan server", { id: loadingToast });
+    }
   };
 
   // Calculate Summary
@@ -75,6 +115,7 @@ export default function ClassAttendance() {
 
   return (
     <Layout role="teacher" hasSidebar={true}>
+      <Toaster position="top-right" />
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">
