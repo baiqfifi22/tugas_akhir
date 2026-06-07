@@ -8,7 +8,176 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-//////////////////// ENUM ////////////////////
+model Guru {
+  id          Int           @id @default(autoincrement())
+  nip         String
+  password    String
+  nama        String
+  email       String
+  status      StatusGuru
+  noHp        String
+  role        Role
+  evaluasi    Evaluasi[]
+  guruTahun   GuruTahun[]
+  laporan     Laporan[]
+  sesiAbsensi SesiAbsensi[]
+}
+
+model Siswa {
+  id         Int             @id @default(autoincrement())
+  nis        String
+  nama       String
+  ttl        String
+  status     StatusAktif
+  jk         JenisKelamin
+  absensi    Absensi[]
+  izin       IzinKehadiran[]
+  laporan    Laporan[]
+  orangTua   OrangTua?
+  siswaKelas SiswaKelas[]
+}
+
+model Kelas {
+  id          Int           @id @default(autoincrement())
+  nama        String
+  guruTahun   GuruTahun[]
+  sesiAbsensi SesiAbsensi[]
+  siswaKelas  SiswaKelas[]
+}
+
+model TahunAjaran {
+  id          Int           @id @default(autoincrement())
+  nama        String
+  mulai       DateTime
+  selesai     DateTime
+  isActive    Boolean       @default(false)
+  guruTahun   GuruTahun[]
+  periode     Periode[]
+  sesiAbsensi SesiAbsensi[]
+  siswaKelas  SiswaKelas[]
+}
+
+model SiswaKelas {
+  id            Int          @id @default(autoincrement())
+  siswaId       Int
+  kelasId       Int
+  tahunAjaranId Int?
+  kelas         Kelas        @relation(fields: [kelasId], references: [id])
+  siswa         Siswa        @relation(fields: [siswaId], references: [id])
+  tahun         TahunAjaran? @relation(fields: [tahunAjaranId], references: [id])
+}
+
+model GuruTahun {
+  id            Int           @id @default(autoincrement())
+  guruId        Int
+  tahunAjaranId Int
+  kelasId       Int
+  mataPelajaran MataPelajaran
+  guru          Guru          @relation(fields: [guruId], references: [id])
+  kelas         Kelas         @relation(fields: [kelasId], references: [id])
+  tahun         TahunAjaran   @relation(fields: [tahunAjaranId], references: [id])
+}
+
+model SesiAbsensi {
+  id            Int           @id @default(autoincrement())
+  tahunAjaranId Int
+  guruId        Int
+  kelasId       Int
+  notes         String?
+  mataPelajaran MataPelajaran
+  tanggal       DateTime
+  absensi       Absensi[]
+  guru          Guru          @relation(fields: [guruId], references: [id])
+  kelas         Kelas         @relation(fields: [kelasId], references: [id])
+  tahun         TahunAjaran   @relation(fields: [tahunAjaranId], references: [id])
+}
+
+model Absensi {
+  id      Int             @id @default(autoincrement())
+  siswaId Int
+  sesiId  Int
+  status  StatusKehadiran
+  sesi    SesiAbsensi     @relation(fields: [sesiId], references: [id])
+  siswa   Siswa           @relation(fields: [siswaId], references: [id])
+}
+
+model Laporan {
+  id      Int      @id @default(autoincrement())
+  guruId  Int
+  siswaId Int
+  tanggal DateTime
+  uraian  String
+  guru    Guru     @relation(fields: [guruId], references: [id])
+  siswa   Siswa    @relation(fields: [siswaId], references: [id])
+}
+
+model OrangTua {
+  id             Int              @id @default(autoincrement())
+  siswaId        Int              @unique
+  password       String
+  nama           String
+  email          String
+  noHp           String
+  siswa          Siswa            @relation(fields: [siswaId], references: [id])
+  submitEvaluasi SubmitEvaluasi[]
+}
+
+model IzinKehadiran {
+  id      Int             @id @default(autoincrement())
+  siswaId Int
+  mulai   DateTime
+  selesai DateTime
+  status  StatusKehadiran
+  perihal String
+  foto    String
+  siswa   Siswa           @relation(fields: [siswaId], references: [id])
+}
+
+model Periode {
+  id             Int              @id @default(autoincrement())
+  tahunAjaranId  Int
+  mulai          DateTime
+  selesai        DateTime
+  evaluasi       Evaluasi[]
+  tahun          TahunAjaran      @relation(fields: [tahunAjaranId], references: [id])
+  submitEvaluasi SubmitEvaluasi[]
+}
+
+model Evaluasi {
+  id        Int           @id @default(autoincrement())
+  periodeId Int
+  aspekId   Int
+  tipe      String
+  guruId    Int?
+  skor      Int
+  kritik    String?
+  tanggal   DateTime
+
+  aspekEval AspekEvaluasi @relation(fields: [aspekId], references: [id])
+  guru      Guru?         @relation(fields: [guruId], references: [id])
+  periode   Periode       @relation(fields: [periodeId], references: [id])
+}
+
+model SubmitEvaluasi {
+  id         Int      @id @default(autoincrement())
+  orangTuaId Int
+  periodeId  Int
+  tanggal    DateTime
+  orangTua   OrangTua @relation(fields: [orangTuaId], references: [id])
+  periode    Periode  @relation(fields: [periodeId], references: [id])
+
+  @@unique([orangTuaId, periodeId])
+}
+
+model AspekEvaluasi {
+  id       Int        @id @default(autoincrement())
+  tipe     String
+  teks     String
+  aktif    Boolean    @default(true)
+  tanggal  DateTime   @default(now())
+
+  evaluasi Evaluasi[]
+}
 
 enum StatusGuru {
   AKTIF
@@ -47,155 +216,4 @@ enum MataPelajaran {
   BAHASA_INGGRIS
   PJOK
   MATA_PELAJARAN_WAJIB
-}
-
-//////////////////// TABEL ////////////////////
-
-model Guru {
-  id       Int        @id @default(autoincrement())
-  nip      String
-  password String
-  nama     String
-  email    String
-  status   StatusGuru
-  noHp     String
-  role     Role
-
-  laporan     Laporan[]
-  sesiAbsensi SesiAbsensi[]
-  guruTahun   GuruTahun[]
-}
-
-model Siswa {
-  id     Int          @id @default(autoincrement())
-  nis    String
-  nama   String
-  ttl    String
-  status StatusAktif
-  jk     JenisKelamin
-
-  laporan    Laporan[]
-  absensi    Absensi[]
-  siswaKelas SiswaKelas[]
-  orangTua   OrangTua?
-  izin       IzinKehadiran[]
-}
-
-model Kelas {
-  id   Int    @id @default(autoincrement())
-  nama String
-
-  siswaKelas SiswaKelas[]
-}
-
-model TahunAjaran {
-  id      Int      @id @default(autoincrement())
-  status  String
-  mulai   DateTime
-  selesai DateTime
-
-  sesiAbsensi SesiAbsensi[]
-  guruTahun   GuruTahun[]
-  periode     Periode[]
-}
-
-model SiswaKelas {
-  id      Int @id @default(autoincrement())
-  siswaId Int
-  kelasId Int
-
-  siswa Siswa @relation(fields: [siswaId], references: [id])
-  kelas Kelas @relation(fields: [kelasId], references: [id])
-
-  guruTahun GuruTahun[]
-}
-
-model GuruTahun {
-  id            Int           @id @default(autoincrement())
-  guruId        Int
-  tahunAjaranId Int
-  siswaKelasId  Int
-  mataPelajaran MataPelajaran
-
-  guru       Guru        @relation(fields: [guruId], references: [id])
-  tahun      TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
-  siswaKelas SiswaKelas  @relation(fields: [siswaKelasId], references: [id])
-}
-
-model SesiAbsensi {
-  id            Int           @id @default(autoincrement())
-  tahunAjaranId Int
-  guruId        Int
-  notes         String?
-  mataPelajaran MataPelajaran
-  tanggal       DateTime
-
-  guru    Guru        @relation(fields: [guruId], references: [id])
-  tahun   TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
-  absensi Absensi[]
-}
-
-model Absensi {
-  id      Int             @id @default(autoincrement())
-  siswaId Int
-  sesiId  Int
-  status  StatusKehadiran
-
-  siswa Siswa       @relation(fields: [siswaId], references: [id])
-  sesi  SesiAbsensi @relation(fields: [sesiId], references: [id])
-}
-
-model Laporan {
-  id      Int      @id @default(autoincrement())
-  guruId  Int
-  siswaId Int
-  tanggal DateTime
-  uraian  String
-
-  guru  Guru  @relation(fields: [guruId], references: [id])
-  siswa Siswa @relation(fields: [siswaId], references: [id])
-}
-
-model OrangTua {
-  id       Int    @id @default(autoincrement())
-  siswaId  Int    @unique
-  password String
-  nama     String
-  email    String
-  noHp     String
-
-  siswa Siswa @relation(fields: [siswaId], references: [id])
-}
-
-model IzinKehadiran {
-  id      Int             @id @default(autoincrement())
-  siswaId Int
-  mulai   DateTime
-  selesai DateTime
-  status  StatusKehadiran
-  perihal String
-  foto    String
-
-  siswa Siswa @relation(fields: [siswaId], references: [id])
-}
-
-model Periode {
-  id            Int      @id @default(autoincrement())
-  tahunAjaranId Int
-  mulai         DateTime
-  selesai       DateTime
-
-  tahun    TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
-  evaluasi Evaluasi[]
-}
-
-model Evaluasi {
-  id        Int      @id @default(autoincrement())
-  periodeId Int
-  tipe      String
-  kritik    Int
-  skor      Int
-  tanggal   DateTime
-
-  periode Periode @relation(fields: [periodeId], references: [id])
 }

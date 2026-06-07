@@ -3,9 +3,11 @@ import React from "react";
 export function TableWrapper({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden shadow-sm">
-      <table className="w-full text-left text-sm">
-        {children}
-      </table>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm min-w-[560px]">
+          {children}
+        </table>
+      </div>
     </div>
   );
 }
@@ -15,7 +17,7 @@ export function Thead({ children }: { children: React.ReactNode }) {
 }
 
 export function Th({ children, className = "" }: { children: React.ReactNode, className?: string }) {
-  return <th className={`px-6 py-4 ${className}`}>{children}</th>;
+  return <th className={`px-4 py-3 md:px-6 md:py-4 whitespace-nowrap ${className}`}>{children}</th>;
 }
 
 export function Tbody({ children }: { children: React.ReactNode }) {
@@ -27,7 +29,7 @@ export function Tr({ children, className = "" }: { children: React.ReactNode, cl
 }
 
 export function Td({ children, className = "", colSpan }: { children: React.ReactNode, className?: string, colSpan?: number }) {
-  return <td colSpan={colSpan} className={`px-6 py-4 ${className}`}>{children}</td>;
+  return <td colSpan={colSpan} className={`px-4 py-3 md:px-6 md:py-4 ${className}`}>{children}</td>;
 }
 
 export function Checkbox({ checked, onChange, disabled }: { checked?: boolean; onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void, disabled?: boolean }) {

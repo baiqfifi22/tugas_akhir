@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
+import { requireApiRole } from "@/lib/withAuth";
 
 export default async function handler(
   req: NextApiRequest,
@@ -9,29 +10,23 @@ export default async function handler(
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  const auth = requireApiRole(req, res, ["GURU", "KEPALA_SEKOLAH"]);
+  if (!auth) return;
+
   try {
-    const userId = req.cookies.userId;
+    const guruId = parseInt(auth.userId, 10);
 
-    console.log("userId: ", userId);
-
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const guruId = parseInt(userId, 10);
-
+    const tahunAktif = await prisma.tahunAjaran.findFirst({
+      where: { isActive: true }
+    });
 
     const guru = await prisma.guru.findUnique({
       where: { id: guruId },
       include: {
         guruTahun: {
+          where: { tahunAjaranId: tahunAktif?.id },
           include: {
-            siswaKelas: {
-              select: {
-                kelasId: true,
-                kelas: true,
-              }
-            }
+            kelas: true
           }
         }
       }
@@ -44,7 +39,7 @@ export default async function handler(
     const classesMap = new Map<number, any>();
 
     guru.guruTahun.forEach((gt) => {
-      const kelas = gt.siswaKelas.kelas;
+      const kelas = gt.kelas;
       if (!classesMap.has(kelas.id)) {
         classesMap.set(kelas.id, {
           id: kelas.id,
@@ -60,7 +55,7 @@ export default async function handler(
     await Promise.all(
       myClasses.map(async (cls) => {
         const count = await prisma.siswaKelas.count({
-          where: { kelasId: cls.id }
+          where: { kelasId: cls.id, tahunAjaranId: tahunAktif?.id }
         });
         cls.students = count;
       })
@@ -72,6 +67,7 @@ export default async function handler(
         id: guru.id,
         name: guru.nama,
         nip: guru.nip,
+        email: guru.email,
         role: guru.role,
       },
       classes: myClasses,

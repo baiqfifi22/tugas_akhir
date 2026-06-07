@@ -1,64 +1,70 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
+import { requireApiRole } from "@/lib/withAuth";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const userId = req.cookies.userId;
+  const auth = requireApiRole(req, res, ["GURU", "KEPALA_SEKOLAH"]);
+  if (!auth) return;
 
-  if (!userId) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
+  const guruId = parseInt(auth.userId, 10);
 
-  const guruId = parseInt(userId, 10);
-
+  // ─── GET ───────────────────────────────────────────────────────────────────
   if (req.method === "GET") {
     try {
-      // Ambil riwayat laporan
-      const laporan = await prisma.laporan.findMany({
-        where: { guruId: guruId },
-        include: {
-          siswa: true,
-        },
-        orderBy: {
-          tanggal: "desc",
-        },
+      const { kelasId } = req.query;
+
+      if (!kelasId || typeof kelasId !== "string") {
+        return res
+          .status(400)
+          .json({ message: "kelasId diperlukan sebagai query param" });
+      }
+
+      const kelasIdInt = parseInt(kelasId, 10);
+
+      const tahunAktif = await prisma.tahunAjaran.findFirst({
+        where: { isActive: true }
       });
 
-      // Ambil daftar siswa yang diajar oleh guru ini
-      const guruTahun = await prisma.guruTahun.findMany({
-        where: { guruId: guruId },
-        include: {
-          siswaKelas: {
-            include: {
-              siswa: true,
-              kelas: true,
-            },
-          },
+      // 1. Ambil semua siswa di kelas ini
+      const siswaKelas = await prisma.siswaKelas.findMany({
+        where: { kelasId: kelasIdInt, tahunAjaranId: tahunAktif?.id },
+        include: { siswa: true, kelas: true },
+      });
+
+      const students = siswaKelas.map((sk) => ({
+        id: String(sk.siswa.id),
+        name: sk.siswa.nama,
+        nis: sk.siswa.nis,
+        avatar: sk.siswa.nama
+          .split(" ")
+          .slice(0, 2)
+          .map((w) => w[0])
+          .join("")
+          .toUpperCase(),
+      }));
+
+      const kelasNama =
+        siswaKelas.length > 0 ? siswaKelas[0].kelas.nama : kelasId;
+
+      // 2. Ambil semua laporan yang pernah dibuat guru ini untuk siswa di kelas tsb
+      const siswaIds = siswaKelas.map((sk) => sk.siswaId);
+
+      const laporanList = await prisma.laporan.findMany({
+        where: {
+          guruId: guruId,
+          siswaId: { in: siswaIds },
         },
+        include: { siswa: true },
+        orderBy: { tanggal: "desc" },
       });
 
-      // Hapus duplikasi siswa (jika diajar beberapa mapel)
-      const studentsMap = new Map();
-      guruTahun.forEach((gt) => {
-        const s = gt.siswaKelas.siswa;
-        const c = gt.siswaKelas.kelas;
-        if (!studentsMap.has(s.id)) {
-          studentsMap.set(s.id, {
-            id: s.id,
-            name: s.nama,
-            class: `Kelas ${c.nama}`,
-          });
-        }
-      });
-
-      const formattedReports = laporan.map((l) => ({
+      const reports = laporanList.map((l) => ({
         id: String(l.id),
         studentId: String(l.siswaId),
         studentName: l.siswa.nama,
-        studentClass: studentsMap.get(l.siswaId)?.class || "-", // Jika tidak ketemu kelasnya
-        period: "Data Periodik", // Saat ini di DB tidak ada field period, bisa diambil dari tanggal
         notes: l.uraian,
         createdAt: l.tanggal.toLocaleDateString("id-ID", {
           day: "numeric",
@@ -69,13 +75,16 @@ export default async function handler(
 
       return res.status(200).json({
         success: true,
-        reports: formattedReports,
-        students: Array.from(studentsMap.values()),
+        kelasNama,
+        students,
+        reports,
       });
     } catch (error) {
       console.error("API GET /teacher/reports Error:", error);
       return res.status(500).json({ message: "Terjadi kesalahan pada server" });
     }
+
+  // ─── POST ──────────────────────────────────────────────────────────────────
   } else if (req.method === "POST") {
     try {
       const { studentId, notes } = req.body;
@@ -91,9 +100,7 @@ export default async function handler(
           uraian: notes,
           tanggal: new Date(),
         },
-        include: {
-          siswa: true,
-        },
+        include: { siswa: true },
       });
 
       return res.status(200).json({
@@ -102,8 +109,6 @@ export default async function handler(
           id: String(newReport.id),
           studentId: String(newReport.siswaId),
           studentName: newReport.siswa.nama,
-          studentClass: "-", // Frontend akan menambahkan
-          period: "Data Periodik",
           notes: newReport.uraian,
           createdAt: newReport.tanggal.toLocaleDateString("id-ID", {
             day: "numeric",

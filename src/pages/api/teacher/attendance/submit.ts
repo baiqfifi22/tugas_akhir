@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { StatusKehadiran } from "@prisma/client";
+import { requireApiRole } from "@/lib/withAuth";
 
 export default async function handler(
   req: NextApiRequest,
@@ -10,14 +11,11 @@ export default async function handler(
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  const auth = requireApiRole(req, res, ["GURU", "KEPALA_SEKOLAH"]);
+  if (!auth) return;
+
   try {
-    const userId = req.cookies.userId;
-
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const guruId = parseInt(userId, 10);
+    const guruId = parseInt(auth.userId, 10);
     const { kelasId, tanggal, notes, students } = req.body;
 
     if (!kelasId || !tanggal || !students) {
@@ -26,7 +24,7 @@ export default async function handler(
 
     // Cari TahunAjaran Aktif
     const tahunAjaran = await prisma.tahunAjaran.findFirst({
-      where: { status: "Aktif" }
+      where: { isActive: true }
     });
 
     if (!tahunAjaran) {
@@ -38,19 +36,18 @@ export default async function handler(
       where: {
         guruId: guruId,
         tahunAjaranId: tahunAjaran.id,
-        siswaKelas: {
-          kelasId: parseInt(kelasId, 10)
-        }
+        kelasId: parseInt(kelasId, 10)
       }
     });
 
-    const mataPelajaran = guruTahun ? guruTahun.mataPelajaran : "Umum";
+    const mataPelajaran = guruTahun ? guruTahun.mataPelajaran : "MATA_PELAJARAN_WAJIB";
 
     // Simpan SesiAbsensi
     const sesi = await prisma.sesiAbsensi.create({
       data: {
         tahunAjaranId: tahunAjaran.id,
         guruId: guruId,
+        kelasId: parseInt(kelasId, 10),
         mataPelajaran: mataPelajaran,
         tanggal: new Date(tanggal),
         notes: notes || "",

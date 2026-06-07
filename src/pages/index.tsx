@@ -1,8 +1,7 @@
-"use client";
+
 
 import { useState } from "react";
 import { useRouter } from "next/router";
-import { GraduationCap, BookOpen, Shield, UserCog, Users } from "lucide-react";
 
 export default function Home() {
   const router = useRouter();
@@ -26,14 +25,16 @@ export default function Home() {
         },
         body: JSON.stringify({ username, password }),
       });
-
       const data = await res.json();
 
       if (res.ok && data.success) {
         // Redirect directly, session is now handled by HttpOnly cookies
         router.push(data.redirect);
       } else {
-        setError(data.message || "Gagal login. Periksa kembali username & password Anda.");
+        setError(
+          data.message ||
+            "Gagal login. Periksa kembali username & password Anda.",
+        );
       }
     } catch (err) {
       setError("Terjadi kesalahan pada server. Silakan coba lagi.");
@@ -72,39 +73,50 @@ export default function Home() {
         </div>
 
         {/* FORM */}
-        <form onSubmit={handleLogin} className="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg">
+        <form
+          onSubmit={handleLogin}
+          className="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg"
+        >
           {/* Username */}
           <div className="mb-5">
-            <label className="block text-sm text-gray-600 mb-1">Username</label>
+            <label htmlFor="username" className="block text-sm text-gray-600 mb-1">Username</label>
             <input
+              id="username"
+              name="username"
               type="text"
+              autoComplete="username"
               placeholder="Masukkan username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               onFocus={() => setFocus("username")}
               onBlur={() => setFocus("")}
               className={`w-full px-4 py-2 rounded-xl border transition-all duration-300 outline-none text-gray-500
-                ${focus === "username"
-                  ? "border-green-400 shadow-md"
-                  : "border-gray-300"
+                ${
+                  focus === "username"
+                    ? "border-green-400 shadow-md"
+                    : "border-gray-300"
                 }`}
             />
           </div>
 
           {/* Password */}
           <div className="mb-6">
-            <label className="block text-sm text-gray-600 mb-1">Password</label>
+            <label htmlFor="password" className="block text-sm text-gray-600 mb-1">Password</label>
             <input
+              id="password"
+              name="password"
               type="password"
+              autoComplete="current-password"
               placeholder="Masukkan password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onFocus={() => setFocus("password")}
               onBlur={() => setFocus("")}
               className={`w-full px-4 py-2 rounded-xl border transition-all duration-300 outline-none text-gray-500
-                ${focus === "password"
-                  ? "border-orange-400 shadow-md"
-                  : "border-gray-300"
+                ${
+                  focus === "password"
+                    ? "border-orange-400 shadow-md"
+                    : "border-gray-300"
                 }`}
             />
           </div>
@@ -119,7 +131,7 @@ export default function Home() {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-2 rounded-xl bg-gradient-to-r from-orange-300 via-yellow-300 text-gray-700 font-semibold shadow-md transition-all duration-300 ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+            className={`w-full py-2 rounded-xl bg-gradient-to-r from-orange-300 via-yellow-300 text-gray-700 font-semibold shadow-md transition-all duration-300 ${loading ? "opacity-50 cursor-not-allowed" : "hover:scale-105"}`}
           >
             {loading ? "Memproses..." : "Login"}
           </button>
@@ -128,21 +140,7 @@ export default function Home() {
           <p className="text-xs text-gray-400 text-center mt-4">
             Sistem absensi pintar & interaktif ✨
           </p>
-          <p className="text-xs text-gray-400 text-center mt-4">
-            guru : nip=12345 & password=guru123
-          </p>
-          <p className="text-xs text-gray-400 text-center mt-4">
-            orang tua : nis=f1d022037 & password=orangtua123
-          </p>
-          <p className="text-xs text-gray-400 text-center mt-4">
-            admin : username=admin & password=admin123
-          </p>
-          <p className="text-xs text-gray-400 text-center mt-4">
-            kepsek : nip=12345kepsek & password=kepsek12345c
-          </p>
         </form>
-
-
       </div>
     </div>
   );

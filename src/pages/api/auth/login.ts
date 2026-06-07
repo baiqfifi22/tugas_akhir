@@ -6,6 +6,44 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // ── PATCH: Ganti password orang tua ─────────────────────────────────────────
+  if (req.method === "PATCH") {
+    try {
+      const { requireApiRole } = await import("@/lib/withAuth");
+      const auth = requireApiRole(req, res, ["ORANG_TUA"]);
+      if (!auth) return;
+
+      const { oldPassword, newPassword } = req.body;
+
+      if (!oldPassword || !newPassword) {
+        return res.status(400).json({ message: "Semua field harus diisi" });
+      }
+      if (newPassword.length < 6) {
+        return res.status(400).json({ message: "Password baru minimal 6 karakter" });
+      }
+
+      const orangTuaId = parseInt(auth.userId, 10);
+      const orangTua = await prisma.orangTua.findUnique({ where: { id: orangTuaId } });
+
+      if (!orangTua) {
+        return res.status(404).json({ message: "Data orang tua tidak ditemukan" });
+      }
+      if (orangTua.password !== oldPassword) {
+        return res.status(401).json({ message: "Password lama tidak sesuai" });
+      }
+
+      await prisma.orangTua.update({
+        where: { id: orangTuaId },
+        data: { password: newPassword },
+      });
+
+      return res.status(200).json({ success: true, message: "Password berhasil diubah" });
+    } catch (error) {
+      console.error("Change Password Error:", error);
+      return res.status(500).json({ message: "Terjadi kesalahan pada server" });
+    }
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ message: "Method not allowed" });
   }

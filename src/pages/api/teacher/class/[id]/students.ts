@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
+import { requireApiRole } from "@/lib/withAuth";
 
 export default async function handler(
   req: NextApiRequest,
@@ -8,6 +9,9 @@ export default async function handler(
   if (req.method !== "GET") {
     return res.status(405).json({ message: "Method not allowed" });
   }
+
+  const auth = requireApiRole(req, res, ["GURU", "KEPALA_SEKOLAH"]);
+  if (!auth) return;
 
   try {
     const { id } = req.query; // this is kelasId
@@ -18,19 +22,28 @@ export default async function handler(
 
     const kelasId = parseInt(id, 10);
 
-    // Fetch siswa dari tabel SiswaKelas
+    const tahunAktif = await prisma.tahunAjaran.findFirst({
+      where: { isActive: true }
+    });
+
+    // Fetch siswa dari tabel SiswaKelas beserta nama kelas
     const siswaKelas = await prisma.siswaKelas.findMany({
       where: {
-        kelasId: kelasId
+        kelasId: kelasId,
+        tahunAjaranId: tahunAktif?.id
       },
       include: {
-        siswa: true
+        siswa: true,
+        kelas: true,
       }
     });
 
     if (!siswaKelas || siswaKelas.length === 0) {
       return res.status(404).json({ message: "Siswa tidak ditemukan untuk kelas ini" });
     }
+
+    // Ambil nama kelas dari record pertama
+    const kelasNama = siswaKelas[0].kelas.nama;
 
     // Format agar mudah dibaca frontend
     const students = siswaKelas.map((sk) => ({
@@ -43,6 +56,8 @@ export default async function handler(
 
     return res.status(200).json({
       success: true,
+      kelasId: kelasId,
+      kelasNama: kelasNama,
       students
     });
 

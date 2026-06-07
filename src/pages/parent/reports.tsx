@@ -1,7 +1,15 @@
 import React, { useState } from "react";
+import { GetServerSideProps } from "next";
+import { requireRole } from "@/lib/withAuth";
 import { Layout } from "@/components/Layout";
 import { Card } from "@/components/ui/Card";
 import { BarChart2, BookOpen, Calendar, ChevronDown } from "lucide-react";
+
+export const getServerSideProps: GetServerSideProps = async (context) => {
+  const auth = requireRole(context, ["ORANG_TUA"]);
+  if ("redirect" in auth) return auth;
+  return { props: {} };
+};
 
 interface MonthlyAttendance {
   month: string;
