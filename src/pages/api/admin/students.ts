@@ -112,22 +112,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return a.kelas.localeCompare(b.kelas, undefined, { numeric: true, sensitivity: 'base' });
       });
 
-      // Filter by kelasId if provided
-      const filtered = kelasId
-        ? students.filter((s) => String(s.kelasId) === String(kelasId))
-        : students;
+      // Filter by kelasId if provided (supports comma-separated list of IDs)
+      let filtered = students;
+      if (kelasId) {
+        const classesFilter = String(kelasId).split(",");
+        filtered = students.filter((s) => s.kelasId && classesFilter.includes(String(s.kelasId)));
+      }
 
-      return res.status(200).json({ success: true, students: filtered });
+      const kelasList = await prisma.kelas.findMany({
+        orderBy: { nama: "asc" }
+      });
+
+      // Sort kelasList naturally (e.g. 1A, 1B, 2A, 10, etc.)
+      kelasList.sort((a, b) => a.nama.localeCompare(b.nama, undefined, { numeric: true, sensitivity: 'base' }));
+
+      return res.status(200).json({ success: true, students: filtered, kelasList });
     }
 
     // ─── POST — Tambah siswa ───────────────────────────────────────────────
     if (req.method === "POST") {
-      const { nis, nama, ttl, jk, kelasId } = req.body;
+      const { nis, nama, ttl, jk, kelasId, tahunAjaranId } = req.body;
       if (!nis || !nama || !ttl || !jk || !kelasId) {
         return res.status(400).json({ message: "Data tidak lengkap" });
       }
 
-      const tahunAjaran = await prisma.tahunAjaran.findFirst({ where: { isActive: true } });
+      let targetTahunId = tahunAjaranId ? parseInt(tahunAjaranId, 10) : undefined;
+      if (!targetTahunId) {
+        const tahunAjaran = await prisma.tahunAjaran.findFirst({ where: { isActive: true } });
+        targetTahunId = tahunAjaran?.id;
+      }
 
       const siswa = await prisma.siswa.create({
         data: {
@@ -139,7 +152,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           siswaKelas: {
             create: {
               kelasId: parseInt(kelasId, 10),
-              tahunAjaranId: tahunAjaran?.id,
+              tahunAjaranId: targetTahunId,
             },
           },
         },
@@ -154,51 +167,78 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // ── Bulk actions (tidak butuh id siswa tunggal) ──────────────────────
       if (action === "wizard_naik_kelas") {
-        const { targetKelasId, sourceKelasId, checkedSiswaIds, uncheckedSiswaIds, isClass6 } = req.body;
+        const { targetTahunAjaranId, targetKelasId, checkedSiswaIds, uncheckedAction, uncheckedSiswaData } = req.body;
         
-        const tahunAktif = await prisma.tahunAjaran.findFirst({ where: { isActive: true } });
-        if (!tahunAktif) return res.status(404).json({ message: "Tidak ada tahun ajaran aktif." });
+        const targetTahunId = targetTahunAjaranId ? parseInt(targetTahunAjaranId, 10) : undefined;
+        if (!targetTahunId) {
+          return res.status(400).json({ message: "Tahun ajaran target tidak valid atau tidak ditentukan." });
+        }
+
+        const targetTahun = await prisma.tahunAjaran.findUnique({ where: { id: targetTahunId } });
+        if (!targetTahun) return res.status(404).json({ message: "Tahun ajaran target tidak ditemukan." });
 
         const operations = [];
 
-        if (isClass6) {
-          // Siswa yang dicentang -> Lulus (NONAKTIF)
-          if (checkedSiswaIds && checkedSiswaIds.length > 0) {
-            operations.push(
-              prisma.siswa.updateMany({
-                where: { id: { in: checkedSiswaIds.map(Number) } },
-                data: { status: "NONAKTIF" },
-              })
-            );
-          }
-        } else {
-          // Siswa yang dicentang -> Naik Kelas (Masuk ke kelas tujuan baru)
-          if (checkedSiswaIds && checkedSiswaIds.length > 0 && targetKelasId) {
-            const dataToInsert = checkedSiswaIds.map((sid: number) => ({
-              siswaId: Number(sid),
-              kelasId: Number(targetKelasId),
-              tahunAjaranId: tahunAktif.id,
-            }));
-            operations.push(
-              prisma.siswaKelas.createMany({
-                data: dataToInsert,
-              })
-            );
-          }
+        // 1. Dapatkan daftar ID siswa yang terlibat untuk membersihkan duplikat
+        const allStudentIds = [
+          ...(checkedSiswaIds || []).map(Number),
+          ...(uncheckedSiswaData || []).map((d: any) => Number(d.siswaId))
+        ];
+
+        if (allStudentIds.length > 0) {
+          // Hapus penempatan kelas lama di tahun ajaran target untuk siswa-siswa ini agar tidak duplikat
+          operations.push(
+            prisma.siswaKelas.deleteMany({
+              where: {
+                siswaId: { in: allStudentIds },
+                tahunAjaranId: targetTahunId
+              }
+            })
+          );
         }
 
-        // Siswa yang tidak dicentang -> Tinggal Kelas (Mengulang di kelas asal)
-        if (uncheckedSiswaIds && uncheckedSiswaIds.length > 0 && sourceKelasId) {
-          const dataToInsert = uncheckedSiswaIds.map((sid: number) => ({
+        // 2. Siswa yang dicentang -> Naik Kelas / Pindah Kelas (Masuk ke kelas tujuan baru)
+        if (checkedSiswaIds && checkedSiswaIds.length > 0 && targetKelasId) {
+          const dataToInsert = checkedSiswaIds.map((sid: number) => ({
             siswaId: Number(sid),
-            kelasId: Number(sourceKelasId),
-            tahunAjaranId: tahunAktif.id,
+            kelasId: Number(targetKelasId),
+            tahunAjaranId: targetTahunId,
           }));
           operations.push(
             prisma.siswaKelas.createMany({
               data: dataToInsert,
             })
           );
+        }
+
+        // 3. Siswa yang tidak dicentang -> Tinggal Kelas atau Keluar/Lulus
+        if (uncheckedSiswaData && uncheckedSiswaData.length > 0) {
+          if (uncheckedAction === "nonaktif") {
+            const studentIdsToDeactivate = uncheckedSiswaData.map((d: any) => Number(d.siswaId));
+            operations.push(
+              prisma.siswa.updateMany({
+                where: { id: { in: studentIdsToDeactivate } },
+                data: { status: "NONAKTIF" },
+              })
+            );
+          } else {
+            // Default "tinggal_kelas": didaftarkan kembali di kelas asal masing-masing pada targetTahunId
+            const dataToInsert = uncheckedSiswaData
+              .filter((d: any) => d.sourceKelasId)
+              .map((d: any) => ({
+                siswaId: Number(d.siswaId),
+                kelasId: Number(d.sourceKelasId),
+                tahunAjaranId: targetTahunId,
+              }));
+
+            if (dataToInsert.length > 0) {
+              operations.push(
+                prisma.siswaKelas.createMany({
+                  data: dataToInsert,
+                })
+              );
+            }
+          }
         }
 
         if (operations.length > 0) {
@@ -245,14 +285,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const nextKelas = await findNextKelasWithFallback(nextKelasNama, 0);
         if (!nextKelas) return res.status(404).json({ message: `Kelas tujuan untuk kelas asal "${currentSK.kelas.nama}" belum ada di database` });
 
-        const tahunAjaran = await prisma.tahunAjaran.findFirst({ where: { isActive: true } });
-        await prisma.siswaKelas.create({
-          data: { siswaId, kelasId: nextKelas.id, tahunAjaranId: tahunAjaran?.id },
-        });
+        let targetTahunId = req.body.tahunAjaranId ? parseInt(req.body.tahunAjaranId, 10) : undefined;
+        if (!targetTahunId) {
+          const tahunAjaran = await prisma.tahunAjaran.findFirst({ where: { isActive: true } });
+          targetTahunId = tahunAjaran?.id;
+        }
+
+        if (targetTahunId) {
+          const existingPlacement = await prisma.siswaKelas.findFirst({
+            where: { siswaId, tahunAjaranId: targetTahunId }
+          });
+          if (existingPlacement) {
+            await prisma.siswaKelas.update({
+              where: { id: existingPlacement.id },
+              data: { kelasId: nextKelas.id }
+            });
+          } else {
+            await prisma.siswaKelas.create({
+              data: { siswaId, kelasId: nextKelas.id, tahunAjaranId: targetTahunId },
+            });
+          }
+        }
         return res.status(200).json({ success: true, message: `Siswa dinaikkan ke kelas ${nextKelas.nama}` });
       }
 
-      const { nis, nama, ttl, jk, kelasId } = rest;
+      const { nis, nama, ttl, jk, kelasId, tahunAjaranId } = rest;
       const updateData: any = {};
       if (nis) updateData.nis = nis;
       if (nama) updateData.nama = nama;
@@ -262,15 +319,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await prisma.siswa.update({ where: { id: siswaId }, data: updateData });
 
       if (kelasId) {
-        // Update kelas: tambah record baru SiswaKelas
-        const tahunAjaran = await prisma.tahunAjaran.findFirst({ where: { isActive: true } });
-        await prisma.siswaKelas.create({
-          data: {
-            siswaId,
-            kelasId: parseInt(kelasId, 10),
-            tahunAjaranId: tahunAjaran?.id,
-          },
-        });
+        let targetTahunId = tahunAjaranId ? parseInt(tahunAjaranId, 10) : undefined;
+        if (!targetTahunId) {
+          const tahunAjaran = await prisma.tahunAjaran.findFirst({ where: { isActive: true } });
+          targetTahunId = tahunAjaran?.id;
+        }
+
+        if (targetTahunId) {
+          const existingPlacement = await prisma.siswaKelas.findFirst({
+            where: { siswaId, tahunAjaranId: targetTahunId }
+          });
+
+          if (existingPlacement) {
+            await prisma.siswaKelas.update({
+              where: { id: existingPlacement.id },
+              data: { kelasId: parseInt(kelasId, 10) }
+            });
+          } else {
+            await prisma.siswaKelas.create({
+              data: {
+                siswaId,
+                kelasId: parseInt(kelasId, 10),
+                tahunAjaranId: targetTahunId
+              }
+            });
+          }
+        }
       }
 
       return res.status(200).json({ success: true, message: "Data siswa diperbarui" });

@@ -130,6 +130,56 @@ function guessSourceClass(targetClassName: string): string {
   return `${grade - 1}${suffix}`;
 }
 
+// Helper to parse academic year name
+function parseAcademicYear(name: string): { year: number; semester: "Ganjil" | "Genap" } {
+  const match = name.match(/^(\d{4})\((Ganjil|Genap)\)$/);
+  if (match) {
+    return {
+      year: parseInt(match[1], 10),
+      semester: match[2] as "Ganjil" | "Genap"
+    };
+  }
+  const yearMatch = name.match(/^(\d{4})/);
+  return {
+    year: yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear(),
+    semester: "Ganjil"
+  };
+}
+
+// Helper untuk menebak Kelas-kelas Asal berdasarkan aturan spesifik
+function guessSourceClasses(targetClassName: string, isSameClassTransition: boolean): string[] {
+  if (isSameClassTransition) {
+    return targetClassName ? [targetClassName] : [];
+  }
+  
+  if (targetClassName === "2A" || targetClassName === "2B") {
+    return ["1A", "1B", "1C"];
+  }
+  if (targetClassName === "3A") {
+    return ["2A"];
+  }
+  if (targetClassName === "3B") {
+    return ["2B"];
+  }
+  if (targetClassName === "4") {
+    return ["3A", "3B"];
+  }
+  if (targetClassName === "5") {
+    return ["4"];
+  }
+  if (targetClassName === "6") {
+    return ["5"];
+  }
+  
+  // Fallback
+  const match = targetClassName.match(/^(\d+)([A-Za-z]*)$/);
+  if (!match) return [];
+  const grade = parseInt(match[1], 10);
+  const suffix = match[2];
+  if (grade <= 1) return [];
+  return [`${grade - 1}${suffix}`];
+}
+
 export default function AdminStudents() {
   const [students, setStudents] = useState<Student[]>([]);
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
@@ -160,8 +210,10 @@ export default function AdminStudents() {
   // Wizard Naik Kelas State
   const [showWizard, setShowWizard] = useState(false);
   const [wizardSourceTahunId, setWizardSourceTahunId] = useState("");
-  const [wizardSourceKelas, setWizardSourceKelas] = useState("");
+  const [wizardSourceKelasNames, setWizardSourceKelasNames] = useState<string[]>([]);
   const [wizardTargetKelasId, setWizardTargetKelasId] = useState("");
+  const [wizardTransitionType, setWizardTransitionType] = useState<"naik_kelas" | "sama_kelas">("naik_kelas");
+  const [wizardUncheckedAction, setWizardUncheckedAction] = useState<"tinggal_kelas" | "nonaktif">("tinggal_kelas");
   const [wizardStudents, setWizardStudents] = useState<Student[]>([]);
   const [wizardCheckedIds, setWizardCheckedIds] = useState<number[]>([]);
   const [wizardLoading, setWizardLoading] = useState(false);
@@ -182,7 +234,10 @@ export default function AdminStudents() {
     fetch(`/api/admin/students?${params}`)
       .then((r) => r.json())
       .then((d) => {
-        if (d.success) setStudents(d.students);
+        if (d.success) {
+          setStudents(d.students);
+          if (d.kelasList) setKelasList(d.kelasList);
+        }
       })
       .catch(console.error)
       .finally(() => setIsLoading(false));
@@ -194,10 +249,6 @@ export default function AdminStudents() {
 
   // Muat dropdown pendukung pada saat pertama kali dimuat
   useEffect(() => {
-    fetch("/api/admin/attendance")
-      .then(r => r.json())
-      .then(d => { if (d.kelasList) setKelasList(d.kelasList); });
-
     fetch("/api/admin/academic-years")
       .then(r => r.json())
       .then(d => {
@@ -253,7 +304,7 @@ export default function AdminStudents() {
     e.preventDefault();
     setFormSaving(true);
     try {
-      const payload = { nis: formNis, nama: formNama, ttl: formTtl, jk: formJk, kelasId: formKelasId };
+      const payload = { nis: formNis, nama: formNama, ttl: formTtl, jk: formJk, kelasId: formKelasId, tahunAjaranId: selectedTahunId };
       const res = await fetch("/api/admin/students", {
         method: editTarget ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -273,7 +324,7 @@ export default function AdminStudents() {
     try {
       const url = action === "delete" ? `/api/admin/students?id=${id}` : "/api/admin/students";
       const method = action === "delete" ? "DELETE" : "PUT";
-      const body = action === "delete" ? undefined : JSON.stringify({ id, action });
+      const body = action === "delete" ? undefined : JSON.stringify({ id, action, tahunAjaranId: selectedTahunId });
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
@@ -285,23 +336,31 @@ export default function AdminStudents() {
 
   // ── Fungsi Wizard Naik Kelas ──
   const openNaikKelasWizard = (targetClassName: string) => {
-    // Cari tahun ajaran sebelumnya
-    if (tahunList.length > 0 && activeYearObj) {
-      const sortedYears = [...tahunList].sort((a, b) => b.id - a.id);
-      const activeIdx = sortedYears.findIndex(t => t.id === activeYearObj.id);
-      // Default source tahun ke tahun sebelumnya
-      const prevYear = sortedYears[activeIdx + 1] || sortedYears[activeIdx] || tahunList[0];
-      setWizardSourceTahunId(String(prevYear.id));
-    }
+    // Cari index selectedTahunId di list desc
+    const targetIdx = tahunList.findIndex(t => String(t.id) === String(selectedTahunId));
+    const prevYear = targetIdx !== -1 ? tahunList[targetIdx + 1] : tahunList[0];
+    const defaultSourceTahunId = prevYear ? String(prevYear.id) : "";
+    setWizardSourceTahunId(defaultSourceTahunId);
 
-    const guessedSource = guessSourceClass(targetClassName);
-    setWizardSourceKelas(guessedSource);
+    // Tentukan default tipe transisi
+    const targetTahunObj = tahunList.find(t => String(t.id) === String(selectedTahunId));
+    const sourceTahunObj = tahunList.find(t => String(t.id) === String(defaultSourceTahunId));
+    let isSame = false;
+    if (targetTahunObj && sourceTahunObj) {
+      const targetInfo = parseAcademicYear(targetTahunObj.nama);
+      const sourceInfo = parseAcademicYear(sourceTahunObj.nama);
+      isSame = targetInfo.semester === "Genap" && sourceInfo.semester === "Ganjil";
+    }
+    const defaultTransitionType = isSame ? "sama_kelas" : "naik_kelas";
+    setWizardTransitionType(defaultTransitionType);
+
+    const guessedSources = guessSourceClasses(targetClassName, defaultTransitionType === "sama_kelas");
+    setWizardSourceKelasNames(guessedSources);
     
     const targetKelas = kelasList.find(k => k.nama === targetClassName);
-    if (targetKelas) {
-      setWizardTargetKelasId(String(targetKelas.id));
-    }
+    setWizardTargetKelasId(targetKelas ? String(targetKelas.id) : "");
 
+    setWizardUncheckedAction("tinggal_kelas");
     setWizardStudents([]);
     setWizardCheckedIds([]);
     setShowWizard(true);
@@ -309,11 +368,21 @@ export default function AdminStudents() {
 
   // Trigger pencarian siswa asal ketika Kelas Asal / Tahun Asal diubah di Wizard
   useEffect(() => {
-    if (showWizard && wizardSourceTahunId && wizardSourceKelas) {
+    if (showWizard && wizardSourceTahunId && wizardSourceKelasNames.length > 0) {
       setWizardLoading(true);
-      const sourceKelasId = kelasList.find(k => k.nama === wizardSourceKelas)?.id || "";
+      const sourceKelasIds = wizardSourceKelasNames
+        .map(name => kelasList.find(k => k.nama === name)?.id)
+        .filter(Boolean)
+        .join(",");
       
-      fetch(`/api/admin/students?tahunAjaranId=${wizardSourceTahunId}&kelasId=${sourceKelasId}`)
+      if (!sourceKelasIds) {
+        setWizardStudents([]);
+        setWizardCheckedIds([]);
+        setWizardLoading(false);
+        return;
+      }
+
+      fetch(`/api/admin/students?tahunAjaranId=${wizardSourceTahunId}&kelasId=${sourceKelasIds}`)
         .then((r) => r.json())
         .then((d) => {
           if (d.success && d.students) {
@@ -329,8 +398,23 @@ export default function AdminStudents() {
           setWizardCheckedIds([]);
         })
         .finally(() => setWizardLoading(false));
+    } else if (showWizard && wizardSourceKelasNames.length === 0) {
+      setWizardStudents([]);
+      setWizardCheckedIds([]);
     }
-  }, [showWizard, wizardSourceTahunId, wizardSourceKelas, kelasList]);
+  }, [showWizard, wizardSourceTahunId, wizardSourceKelasNames, kelasList]);
+
+  // Auto-guess Kelas Asal when Target Class, Transition Type or Source Year changes
+  useEffect(() => {
+    if (showWizard && wizardTargetKelasId) {
+      const targetKelas = kelasList.find(k => String(k.id) === String(wizardTargetKelasId));
+      if (targetKelas) {
+        const isSame = wizardTransitionType === "sama_kelas";
+        const guessed = guessSourceClasses(targetKelas.nama, isSame);
+        setWizardSourceKelasNames(guessed);
+      }
+    }
+  }, [showWizard, wizardTargetKelasId, wizardTransitionType]);
 
   const handleWizardCheckboxChange = (studentId: number) => {
     if (wizardCheckedIds.includes(studentId)) {
@@ -353,10 +437,12 @@ export default function AdminStudents() {
     if (wizardStudents.length === 0) return;
     setWizardSubmitting(true);
 
-    const isClass6 = wizardSourceKelas.startsWith("6");
-    const uncheckedSiswaIds = wizardStudents
-      .map(s => s.id)
-      .filter(id => !wizardCheckedIds.includes(id));
+    const uncheckedSiswaData = wizardStudents
+      .filter(s => !wizardCheckedIds.includes(s.id))
+      .map(s => ({
+        siswaId: s.id,
+        sourceKelasId: s.kelasId
+      }));
 
     try {
       const res = await fetch("/api/admin/students", {
@@ -364,18 +450,18 @@ export default function AdminStudents() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "wizard_naik_kelas",
-          sourceKelasId: kelasList.find(k => k.nama === wizardSourceKelas)?.id || null,
-          targetKelasId: isClass6 ? null : Number(wizardTargetKelasId),
+          targetTahunAjaranId: Number(selectedTahunId),
+          targetKelasId: Number(wizardTargetKelasId),
           checkedSiswaIds: wizardCheckedIds,
-          uncheckedSiswaIds: uncheckedSiswaIds,
-          isClass6
+          uncheckedAction: wizardUncheckedAction,
+          uncheckedSiswaData: uncheckedSiswaData
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
 
-      showToast(isClass6 ? "Siswa kelas 6 berhasil diluluskan!" : "Kenaikan kelas massal berhasil diproses!");
+      showToast("Proses penempatan kelas massal berhasil diproses!");
       setShowWizard(false);
       fetchData();
     } catch (err: any) {
@@ -451,36 +537,78 @@ export default function AdminStudents() {
 
       {/* Modal: Wizard Naik Kelas Massal */}
       {showWizard && (
-        <Modal title={wizardSourceKelas.startsWith("6") ? "Kelulusan Kelas 6" : "Naik Kelas & Penempatan"} onClose={() => setShowWizard(false)}>
+        <Modal title="Wizard Kenaikan & Penempatan Kelas" onClose={() => setShowWizard(false)}>
           <form onSubmit={handleWizardSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-zinc-600 mb-1">Tahun Ajaran Asal (Lama)</label>
+                <label className="block text-xs font-bold text-zinc-700 mb-1">Tahun Ajaran Asal</label>
                 <select value={wizardSourceTahunId} onChange={(e) => setWizardSourceTahunId(e.target.value)}
                   className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-xs text-zinc-700 focus:outline-none bg-white">
                   {tahunList.map(t => <option key={t.id} value={t.id}>{t.nama}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-600 mb-1">Kelas Asal (Lama)</label>
-                <select value={wizardSourceKelas} onChange={(e) => setWizardSourceKelas(e.target.value)}
-                  className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-xs text-zinc-700 focus:outline-none bg-white">
-                  <option value="">-- Pilih Kelas Asal --</option>
-                  {kelasList.map(k => <option key={k.id} value={k.nama}>{k.nama}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {!wizardSourceKelas.startsWith("6") && (
-              <div>
-                <label className="block text-xs font-semibold text-zinc-600 mb-1">Kelas Tujuan Baru (Tahun Ajaran Aktif)</label>
+                <label className="block text-xs font-bold text-zinc-700 mb-1">Kelas Tujuan Baru</label>
                 <select value={wizardTargetKelasId} onChange={(e) => setWizardTargetKelasId(e.target.value)} required
                   className="w-full border border-zinc-200 rounded-lg px-3 py-2 text-xs text-zinc-700 focus:outline-none bg-white">
                   <option value="">-- Pilih Kelas Tujuan --</option>
                   {kelasList.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
                 </select>
               </div>
-            )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-zinc-700 mb-1.5">Tipe Transisi</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-xs text-zinc-700 cursor-pointer font-medium">
+                  <input type="radio" name="transitionType" value="naik_kelas" checked={wizardTransitionType === "naik_kelas"}
+                    onChange={() => setWizardTransitionType("naik_kelas")} className="text-blue-600 focus:ring-blue-500" />
+                  Kenaikan Kelas (Naik Tingkat)
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-700 cursor-pointer font-medium">
+                  <input type="radio" name="transitionType" value="sama_kelas" checked={wizardTransitionType === "sama_kelas"}
+                    onChange={() => setWizardTransitionType("sama_kelas")} className="text-blue-600 focus:ring-blue-500" />
+                  Sama Kelas (Mengulang / Semester Baru)
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-zinc-700 mb-1.5">Kelas Asal (Bisa pilih lebih dari satu)</label>
+              <div className="flex flex-wrap gap-1.5 p-2 border border-zinc-200 rounded-xl bg-zinc-50/50">
+                {kelasList.map(k => {
+                  const isChecked = wizardSourceKelasNames.includes(k.nama);
+                  return (
+                    <label key={k.id} className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer border select-none transition-all ${isChecked ? "bg-blue-600 border-blue-600 text-white shadow-sm" : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50"}`}>
+                      <input type="checkbox" checked={isChecked} onChange={() => {
+                        if (isChecked) {
+                          setWizardSourceKelasNames(wizardSourceKelasNames.filter(name => name !== k.nama));
+                        } else {
+                          setWizardSourceKelasNames([...wizardSourceKelasNames, k.nama]);
+                        }
+                      }} className="sr-only" />
+                      {k.nama}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-zinc-700 mb-1.5">Nasib Siswa Tidak Dicentang</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-xs text-zinc-700 cursor-pointer font-medium">
+                  <input type="radio" name="uncheckedAction" value="tinggal_kelas" checked={wizardUncheckedAction === "tinggal_kelas"}
+                    onChange={() => setWizardUncheckedAction("tinggal_kelas")} className="text-blue-600 focus:ring-blue-500" />
+                  Tinggal Kelas (Mengulang di Kelas Asal)
+                </label>
+                <label className="flex items-center gap-2 text-xs text-zinc-700 cursor-pointer font-medium">
+                  <input type="radio" name="uncheckedAction" value="nonaktif" checked={wizardUncheckedAction === "nonaktif"}
+                    onChange={() => setWizardUncheckedAction("nonaktif")} className="text-blue-600 focus:ring-blue-500" />
+                  Keluar Sekolah / Lulus (Status NONAKTIF)
+                </label>
+              </div>
+            </div>
 
             {/* Area Tinjau Checklist Siswa */}
             <div className="border border-zinc-100 rounded-xl p-3 bg-zinc-50/50">
@@ -503,10 +631,10 @@ export default function AdminStudents() {
                 </div>
               ) : wizardStudents.length === 0 ? (
                 <div className="text-center py-6 text-zinc-400 text-xs">
-                  Tidak ada siswa di Kelas & Tahun Ajaran asal yang terpilih.
+                  Tidak ada siswa di Kelas Asal & Tahun Ajaran terpilih.
                 </div>
               ) : (
-                <div className="max-h-[200px] overflow-y-auto space-y-2 pr-1">
+                <div className="max-h-[180px] overflow-y-auto space-y-2 pr-1">
                   {wizardStudents.map(ws => {
                     const isChecked = wizardCheckedIds.includes(ws.id);
                     return (
@@ -520,7 +648,10 @@ export default function AdminStudents() {
                           )}
                           <span className="text-xs font-semibold text-zinc-800 leading-tight">{ws.nama}</span>
                         </div>
-                        <span className="text-[10px] font-mono text-zinc-400">{ws.nis}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 border border-zinc-200">{ws.kelas}</span>
+                          <span className="text-[10px] font-mono text-zinc-400">{ws.nis}</span>
+                        </div>
                       </div>
                     );
                   })}
@@ -533,11 +664,8 @@ export default function AdminStudents() {
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2 text-xs text-amber-800">
                 <Info size={14} className="shrink-0 mt-0.5" />
                 <p>
-                  {wizardSourceKelas.startsWith("6") ? (
-                    <span>Siswa yang dicentang akan otomatis diubah statusnya menjadi <strong>NONAKTIF (Lulus)</strong>.</span>
-                  ) : (
-                    <span>Siswa yang **tidak dicentang** otomatis dianggap **Tinggal Kelas** dan akan didaftarkan kembali mengulang di Kelas asal ({wizardSourceKelas}) pada Tahun Ajaran Aktif.</span>
-                  )}
+                  Siswa yang <strong>dicentang</strong> akan dipindahkan ke Kelas Tujuan Baru (Tahun Ajaran Terpilih). <br />
+                  Siswa yang <strong>tidak dicentang</strong> akan diproses sebagai: <strong>{wizardUncheckedAction === "nonaktif" ? "LULUS / NONAKTIF (Status Nonaktif)" : "TINGGAL KELAS (Mengulang di Kelas Asal masing-masing)"}</strong>.
                 </p>
               </div>
             )}
@@ -565,30 +693,16 @@ export default function AdminStudents() {
           <button onClick={() => printPDF(filtered, activeTahunAjaran)} className="flex items-center gap-2 px-3 py-2 text-sm border border-zinc-200 rounded-lg text-zinc-600 hover:bg-zinc-50 transition-colors font-semibold">
             <Printer size={16} /> Print PDF
           </button>
+          {(kelasFilter === "all" ? students.length === 0 : filtered.length === 0) && (
+            <Button variant="outline" onClick={() => openNaikKelasWizard(kelasFilter !== "all" ? kelasFilter : "")}>
+              <ArrowUpCircle size={16} /> Kenaikan Kelas (Wizard)
+            </Button>
+          )}
           <Button variant="primary" onClick={openAdd}><Plus size={18} /> Tambah Siswa</Button>
         </div>
       </div>
 
-      {/* Spanduk Saran Kenaikan Kelas Pintar (Smart Suggestion Banner) */}
-      {showSuggestionBanner && (
-        <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50/50 border border-blue-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fadeIn shadow-sm">
-          <div className="flex gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0 text-blue-600">
-              <ArrowUpCircle size={20} />
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-blue-900">Kelas {kelasFilter} Masih Kosong</h4>
-              <p className="text-xs text-blue-700 mt-0.5">
-                Apakah Anda ingin melakukan Kenaikan Kelas otomatis untuk memindahkan murid angkatan sebelumnya ke Kelas {kelasFilter} di Tahun Ajaran Aktif ini?
-              </p>
-            </div>
-          </div>
-          <button onClick={() => openNaikKelasWizard(kelasFilter)}
-            className="px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all shadow shrink-0">
-            Atur Kenaikan Kelas
-          </button>
-        </div>
-      )}
+
 
       {/* Filters Card */}
       <Card className="mb-6 p-4 flex flex-wrap gap-3 items-center shadow-sm">
@@ -642,7 +756,53 @@ export default function AdminStudents() {
             </Thead>
             <Tbody>
               {filtered.length === 0 ? (
-                <Tr><Td colSpan={7} className="text-center py-10 text-zinc-400">Tidak ada data siswa untuk kriteria terpilih.</Td></Tr>
+                <Tr>
+                  <Td colSpan={7} className="text-center py-16 px-4">
+                    <div className="flex flex-col items-center justify-center max-w-md mx-auto text-center font-sans">
+                      <div className="w-12 h-12 rounded-full bg-zinc-50 flex items-center justify-center text-zinc-400 mb-3 border border-zinc-100 animate-pulse">
+                        <GraduationCap size={22} className="text-blue-500" />
+                      </div>
+                      {kelasFilter !== "all" ? (
+                        <>
+                          <h3 className="text-sm font-bold text-zinc-950">Kelas {kelasFilter} Kosong</h3>
+                          <p className="text-xs text-zinc-500 mt-1 mb-4 leading-relaxed max-w-sm">
+                            Belum ada siswa yang ditempatkan di kelas <strong>{kelasFilter}</strong> untuk Tahun Ajaran <strong>{activeTahunAjaran}</strong>. Silakan gunakan Wizard untuk penempatan kelas.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => openNaikKelasWizard(kelasFilter)}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow cursor-pointer border-none"
+                          >
+                            <ArrowUpCircle size={15} /> Atur Kenaikan Kelas (Wizard)
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <h3 className="text-sm font-bold text-zinc-950">Belum Ada Siswa</h3>
+                          <p className="text-xs text-zinc-500 mt-1 mb-4 leading-relaxed max-w-sm">
+                            Tahun Ajaran <strong>{activeTahunAjaran}</strong> belum memiliki siswa terdaftar sama sekali. Silakan gunakan Wizard untuk menyalin dari Tahun Ajaran sebelumnya atau tambah siswa secara manual.
+                          </p>
+                          <div className="flex gap-2 justify-center">
+                            <button
+                              type="button"
+                              onClick={() => openNaikKelasWizard("")}
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-all border border-zinc-200 cursor-pointer"
+                            >
+                              <ArrowUpCircle size={14} /> Wizard Kenaikan
+                            </button>
+                            <button
+                              type="button"
+                              onClick={openAdd}
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-sm cursor-pointer border-none"
+                            >
+                              <Plus size={14} /> Tambah Siswa
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </Td>
+                </Tr>
               ) : (
                 filtered.map((s) => (
                   <Tr key={s.id}>

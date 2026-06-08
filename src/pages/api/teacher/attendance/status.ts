@@ -74,7 +74,10 @@ export default async function handler(
       siswaId: i.siswaId,
       siswaNama: i.siswa.nama,
       tipe: i.status,
-      perihal: i.perihal
+      perihal: i.perihal,
+      mulai: i.mulai.toISOString(),
+      selesai: i.selesai.toISOString(),
+      foto: i.foto || ""
     }));
 
     if (!sesi) {
