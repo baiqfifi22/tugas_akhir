@@ -48,25 +48,163 @@ export default async function handler(
   if (!auth) return;
 
   try {
-    const { id, week } = req.query;
+    const { id, week, yearly, studentId } = req.query;
     const kelasId = parseInt(id as string, 10);
 
     if (isNaN(kelasId)) {
       return res.status(400).json({ message: "kelasId tidak valid" });
     }
 
-    // Default: minggu ini
-    const weekStr =
-      (week as string) || getISOWeek(new Date());
-    const { start, end } = parseWeekRange(weekStr);
-
     const tahunAktif = await prisma.tahunAjaran.findFirst({
       where: { isActive: true }
     });
+    if (!tahunAktif) {
+      return res.status(404).json({ message: "Tahun ajaran aktif tidak ditemukan" });
+    }
+
+    // 1. Detail Kehadiran 1 Siswa selama 1 Tahun Ajaran Aktif
+    if (studentId) {
+      const sId = parseInt(studentId as string, 10);
+      if (isNaN(sId)) {
+        return res.status(400).json({ message: "studentId tidak valid" });
+      }
+
+      const student = await prisma.siswa.findUnique({
+        where: { id: sId },
+      });
+      if (!student) {
+        return res.status(404).json({ message: "Siswa tidak ditemukan" });
+      }
+
+      const absensiSiswa = await prisma.absensi.findMany({
+        where: {
+          siswaId: sId,
+          sesi: {
+            tahunAjaranId: tahunAktif.id,
+            kelasId,
+          },
+        },
+        include: {
+          sesi: true,
+        },
+        orderBy: {
+          sesi: {
+            tanggal: "asc",
+          },
+        },
+      });
+
+      const totalHadir = absensiSiswa.filter((a) => a.status === "HADIR").length;
+      const totalSakit = absensiSiswa.filter((a) => a.status === "SAKIT").length;
+      const totalIzin = absensiSiswa.filter((a) => a.status === "IZIN").length;
+      const totalAlpa = absensiSiswa.filter((a) => a.status === "ALPA").length;
+      const totalSesi = absensiSiswa.length;
+
+      const monthlyData: Record<string, { hadir: number; sakit: number; izin: number; alpa: number }> = {};
+      
+      const cur = new Date(tahunAktif.mulai);
+      const limit = new Date(tahunAktif.selesai);
+      while (cur <= limit) {
+        const monthKey = cur.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+        monthlyData[monthKey] = { hadir: 0, sakit: 0, izin: 0, alpa: 0 };
+        cur.setMonth(cur.getMonth() + 1);
+      }
+
+      absensiSiswa.forEach((a) => {
+        const monthKey = new Date(a.sesi.tanggal).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = { hadir: 0, sakit: 0, izin: 0, alpa: 0 };
+        }
+        if (a.status === "HADIR") monthlyData[monthKey].hadir++;
+        else if (a.status === "SAKIT") monthlyData[monthKey].sakit++;
+        else if (a.status === "IZIN") monthlyData[monthKey].izin++;
+        else if (a.status === "ALPA") monthlyData[monthKey].alpa++;
+      });
+
+      return res.status(200).json({
+        success: true,
+        studentName: student.nama,
+        nis: student.nis,
+        stats: {
+          hadir: totalHadir,
+          sakit: totalSakit,
+          izin: totalIzin,
+          alpa: totalAlpa,
+          total: totalSesi,
+          pct: totalSesi > 0 ? Math.round((totalHadir / totalSesi) * 100) : 0,
+        },
+        monthlyData: Object.entries(monthlyData).map(([month, data]) => ({
+          month,
+          ...data,
+        })),
+      });
+    }
+
+    // 2. Rekap Seluruh Siswa 1 Tahun Ajaran Aktif (untuk Rapor/Download)
+    if (yearly === "true") {
+      const siswaKelas = await prisma.siswaKelas.findMany({
+        where: { kelasId, tahunAjaranId: tahunAktif.id },
+        include: { siswa: true, kelas: true },
+      });
+      const kelasNama = siswaKelas.length > 0 ? siswaKelas[0].kelas.nama : String(kelasId);
+
+      const sessions = await prisma.sesiAbsensi.findMany({
+        where: {
+          kelasId,
+          tahunAjaranId: tahunAktif.id,
+        },
+        include: {
+          absensi: true,
+        },
+      });
+
+      const summaryData = siswaKelas.map(({ siswa }) => {
+        let hadir = 0;
+        let sakit = 0;
+        let izin = 0;
+        let alpa = 0;
+
+        sessions.forEach((s) => {
+          const ab = s.absensi.find((a) => a.siswaId === siswa.id);
+          if (ab) {
+            if (ab.status === "HADIR") hadir++;
+            else if (ab.status === "SAKIT") sakit++;
+            else if (ab.status === "IZIN") izin++;
+            else if (ab.status === "ALPA") alpa++;
+          }
+        });
+
+        const total = hadir + sakit + izin + alpa;
+        const pct = total > 0 ? Math.round((hadir / total) * 100) : 0;
+
+        return {
+          id: siswa.id,
+          name: siswa.nama,
+          nis: siswa.nis,
+          hadir,
+          sakit,
+          izin,
+          alpa,
+          total,
+          pct,
+        };
+      }).sort((a, b) => a.name.localeCompare(b.name));
+
+      return res.status(200).json({
+        success: true,
+        kelasNama,
+        tahunAjaranNama: tahunAktif.nama,
+        summaryData,
+      });
+    }
+
+    // 3. Default: Rekap Mingguan
+    const weekStr = (week as string) || getISOWeek(new Date());
+    const { start, end } = parseWeekRange(weekStr);
 
     // Ambil semua siswa di kelas ini
     const siswaKelas = await prisma.siswaKelas.findMany({
-      where: { kelasId, tahunAjaranId: tahunAktif?.id },
+      where: { kelasId, tahunAjaranId: tahunAktif.id },
       include: { siswa: true, kelas: true },
     });
 
@@ -102,7 +240,6 @@ export default async function handler(
     // Isi status dari setiap sesi
     sesiList.forEach((sesi) => {
       const jsDay = sesi.tanggal.getDay(); // 0=Sun, 1=Mon ... 6=Sat
-      // Konversi ke index 0=Mon, 4=Fri
       const dayIdx = jsDay === 0 ? 6 : jsDay - 1;
       const dayKey = DAY_KEYS[dayIdx];
 
@@ -125,7 +262,8 @@ export default async function handler(
     });
 
     // Format output
-    const summaryData = Array.from(studentMap.values()).map((s) => ({
+    const summaryData = Array.from(studentMap.entries()).map(([id, s]) => ({
+      id,
       name: s.name,
       ...s.days,
     }));
@@ -147,11 +285,13 @@ export default async function handler(
       ])
     );
 
-    // Hitung summary hari ini
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setUTCHours(23, 59, 59, 999);
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const localTodayStr = `${year}-${month}-${day}`;
+    const today = new Date(`${localTodayStr}T00:00:00.000Z`);
+    const todayEnd = new Date(`${localTodayStr}T23:59:59.999Z`);
 
     const sesiHariIni = await prisma.sesiAbsensi.findFirst({
       where: {

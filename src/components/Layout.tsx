@@ -438,7 +438,7 @@ export function Layout({
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 flex">
+    <div className="min-h-screen w-full bg-zinc-50 flex">
       {/* ── Desktop Sidebar (fixed, always visible on md+) ────────────────── */}
       {hasSidebar && (
         <div className="hidden md:flex w-64 bg-white border-r border-zinc-200 flex-col fixed h-full z-10 left-0 top-0">
@@ -473,10 +473,10 @@ export function Layout({
 
       {/* ── Main Content ──────────────────────────────────────────────────── */}
       <div
-        className={`flex-1 flex flex-col min-h-screen ${hasSidebar ? "md:ml-64" : ""}`}
+        className={`flex-1 flex flex-col min-h-screen w-full ${hasSidebar ? "md:ml-64" : ""}`}
       >
         {/* Header */}
-        <header className="h-16 bg-white border-b border-zinc-200 flex items-center px-4 md:px-8 justify-between shrink-0 sticky top-0 z-10">
+        <header className="h-16 bg-white border-b border-zinc-200 flex items-center px-4 md:px-8 justify-between shrink-0 sticky top-0 z-30">
           <div className="flex items-center gap-3">
             {/* Hamburger button — mobile only, only when sidebar is enabled */}
             {hasSidebar && (
@@ -529,7 +529,7 @@ export function Layout({
 
               {/* Profile Popover — muncul saat diklik */}
               {profileOpen && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-xl border border-zinc-200 z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-xl border border-zinc-200 z-50 overflow-hidden">
                   {/* Header profil */}
                   <div className="p-5 border-b border-zinc-100">
                     <div className="flex items-center gap-3">

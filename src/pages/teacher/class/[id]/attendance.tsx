@@ -54,6 +54,14 @@ function formatDateIndo(dateStr: string): string {
   });
 }
 
+// Helper mendapatkan tanggal lokal YYYY-MM-DD
+function getLocalDateString(d: Date = new Date()): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function ClassAttendance() {
   const router = useRouter();
   const { id } = router.query;
@@ -78,6 +86,7 @@ export default function ClassAttendance() {
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [activeIzins, setActiveIzins] = useState<any[]>([]);
   const [selectedIzin, setSelectedIzin] = useState<any | null>(null);
+  const [isMarkingAll, setIsMarkingAll] = useState(false);
 
   // Load daftar siswa
   const fetchStudents = useCallback(async (kelasId: string) => {
@@ -160,7 +169,7 @@ export default function ClassAttendance() {
   // Init
   useEffect(() => {
     setIsClient(true);
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalDateString();
     setDate(today);
   }, []);
 
@@ -180,7 +189,12 @@ export default function ClassAttendance() {
   };
 
   const markAllHadir = () => {
+    setIsMarkingAll(true);
     setStudents(students.map((s) => ({ ...s, status: "Hadir" })));
+    toast.success("Semua siswa ditandai Hadir");
+    setTimeout(() => {
+      setIsMarkingAll(false);
+    }, 800);
   };
 
   const handleSimpan = () => {
@@ -308,8 +322,19 @@ export default function ClassAttendance() {
         </div>
         <div className="flex gap-3 flex-wrap">
           {!isLocked && (
-            <Button variant="outline" onClick={markAllHadir}>
-              Mark All Hadir
+            <Button
+              variant={isMarkingAll ? "primary" : "outline"}
+              onClick={markAllHadir}
+              disabled={isMarkingAll}
+              className={isMarkingAll ? "bg-emerald-600 hover:bg-emerald-600 text-white border-emerald-600 transition-all duration-300" : "transition-all duration-300"}
+            >
+              {isMarkingAll ? (
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 size={16} className="animate-bounce" /> Semua Hadir!
+                </span>
+              ) : (
+                "Mark All Hadir"
+              )}
             </Button>
           )}
 
@@ -355,7 +380,7 @@ export default function ClassAttendance() {
       </div>
 
       {/* Banner: Sudah Absen Hari Ini */}
-      {mode === "edit" && date === new Date().toISOString().split("T")[0] && (
+      {mode === "edit" && date === getLocalDateString() && (
         <div className="mb-6 p-6 rounded-xl border border-emerald-200 bg-emerald-50/80 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex items-center gap-3 flex-1">
@@ -393,7 +418,7 @@ export default function ClassAttendance() {
       )}
 
       {/* Banner: Tanggal lain yang sudah punya absensi */}
-      {mode === "edit" && date !== new Date().toISOString().split("T")[0] && (
+      {mode === "edit" && date !== getLocalDateString() && (
         <div className="mb-6 p-6 rounded-xl border border-amber-200 bg-amber-50/80 shadow-sm">
           <div className="flex items-center gap-3">
             <AlertCircle size={20} className="text-amber-600 flex-shrink-0" />
@@ -554,77 +579,140 @@ export default function ClassAttendance() {
                 {students.length} siswa
               </span>
             </div>
-            <TableWrapper>
-              <Thead>
-                <Tr>
-                  <Th>No</Th>
-                  <Th>Nama Siswa</Th>
-                  <Th>Status Kehadiran</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {students.length === 0 && (
+            {/* Desktop View Table */}
+            <div className="hidden md:block">
+              <TableWrapper>
+                <Thead>
                   <Tr>
-                    <Td colSpan={3} className="text-center text-zinc-400 py-8">
-                      {checkingStatus
-                        ? "Memuat data..."
-                        : "Tidak ada data siswa"}
-                    </Td>
+                    <Th>No</Th>
+                    <Th>Nama Siswa</Th>
+                    <Th>Status Kehadiran</Th>
                   </Tr>
-                )}
-                {students.map((student, idx) => {
-                  const hasIzin = activeIzins.find(
-                    (i: any) => i.siswaId === student.id,
-                  );
-                  return (
-                    <Tr key={student.id}>
-                      <Td className="text-zinc-400 text-sm w-10">{idx + 1}</Td>
-                      <Td className="font-medium text-zinc-900">
+                </Thead>
+                <Tbody>
+                  {students.length === 0 && (
+                    <Tr>
+                      <Td colSpan={3} className="text-center text-zinc-400 py-8">
+                        {checkingStatus
+                          ? "Memuat data..."
+                          : "Tidak ada data siswa"}
+                      </Td>
+                    </Tr>
+                  )}
+                  {students.map((student, idx) => {
+                    const hasIzin = activeIzins.find(
+                      (i: any) => i.siswaId === student.id,
+                    );
+                    return (
+                      <Tr key={student.id}>
+                        <Td className="text-zinc-400 text-sm w-10">{idx + 1}</Td>
+                        <Td className="font-medium text-zinc-900">
+                          <div className="flex flex-col">
+                            <span>{student.name}</span>
+                            {hasIzin && (
+                              <span className="text-xs text-blue-600 font-semibold mt-0.5">
+                                Keterangan Tidak Hadir: {hasIzin.tipe} 
+                              </span>
+                            )}
+                          </div>
+                        </Td>
+                        <Td>
+                          <div className="flex flex-wrap items-center gap-4">
+                            {["Hadir", "Izin", "Sakit", "Alpa"].map((st) => (
+                              <label
+                                key={st}
+                                className={`flex items-center gap-2 cursor-pointer group ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`status-${student.id}`}
+                                  value={st}
+                                  checked={student.status === st}
+                                  disabled={isLocked}
+                                  onChange={() =>
+                                    handleStatusChange(student.id, st)
+                                  }
+                                  className="w-4 h-4 rounded-full border-zinc-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                                />
+                                <span
+                                  className={`text-sm ${
+                                    student.status === st
+                                      ? "font-semibold text-zinc-900"
+                                      : "text-zinc-500 group-hover:text-zinc-700"
+                                  }`}
+                                >
+                                  {st}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </Td>
+                      </Tr>
+                    );
+                  })}
+                </Tbody>
+              </TableWrapper>
+            </div>
+
+            {/* Mobile View Card List */}
+            <div className="block md:hidden divide-y divide-zinc-100">
+              {students.length === 0 && (
+                <div className="text-center text-zinc-400 py-12 bg-white rounded-xl border border-zinc-150">
+                  {checkingStatus
+                    ? "Memuat data..."
+                    : "Tidak ada data siswa"}
+                </div>
+              )}
+              {students.map((student, idx) => {
+                const hasIzin = activeIzins.find(
+                  (i: any) => i.siswaId === student.id,
+                );
+                return (
+                  <div key={student.id} className="p-4 bg-white hover:bg-zinc-50 transition-colors border-b border-zinc-100 last:border-b-0">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-zinc-400 w-5 text-right">{idx + 1}.</span>
                         <div className="flex flex-col">
-                          <span>{student.name}</span>
+                          <span className="font-bold text-zinc-900 text-sm">{student.name}</span>
                           {hasIzin && (
                             <span className="text-xs text-blue-600 font-semibold mt-0.5">
-                              Keterangan Tidak Hadir: {hasIzin.tipe} 
+                              Keterangan Tidak Hadir: {hasIzin.tipe}
                             </span>
                           )}
                         </div>
-                      </Td>
-                      <Td>
-                        <div className="flex flex-wrap items-center gap-4">
-                          {["Hadir", "Izin", "Sakit", "Alpa"].map((st) => (
-                            <label
-                              key={st}
-                              className={`flex items-center gap-2 cursor-pointer group ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
-                            >
-                              <input
-                                type="radio"
-                                name={`status-${student.id}`}
-                                value={st}
-                                checked={student.status === st}
-                                disabled={isLocked}
-                                onChange={() =>
-                                  handleStatusChange(student.id, st)
-                                }
-                                className="w-4 h-4 rounded-full border-zinc-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                              />
-                              <span
-                                className={`text-sm ${
-                                  student.status === st
-                                    ? "font-semibold text-zinc-900"
-                                    : "text-zinc-500 group-hover:text-zinc-700"
-                                }`}
-                              >
-                                {st}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </Td>
-                    </Tr>
-                  );
-                })}
-              </Tbody>
-            </TableWrapper>
+                      </div>
+                    </div>
+                    {/* Attendance Grid Options */}
+                    <div className="grid grid-cols-4 gap-2">
+                      {["Hadir", "Izin", "Sakit", "Alpa"].map((st) => {
+                        const isSelected = student.status === st;
+                        let activeBgBorderText = "";
+                        if (isSelected) {
+                          if (st === "Hadir") activeBgBorderText = "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold";
+                          else if (st === "Izin") activeBgBorderText = "bg-blue-50 border-blue-500 text-blue-700 font-bold";
+                          else if (st === "Sakit") activeBgBorderText = "bg-yellow-50 border-yellow-500 text-yellow-700 font-bold";
+                          else if (st === "Alpa") activeBgBorderText = "bg-red-50 border-red-500 text-red-700 font-bold";
+                        } else {
+                          activeBgBorderText = "bg-transparent border-zinc-200 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700";
+                        }
+
+                        return (
+                          <button
+                            key={st}
+                            type="button"
+                            disabled={isLocked}
+                            onClick={() => handleStatusChange(student.id, st)}
+                            className={`py-2 text-xs border rounded-lg transition-all focus:outline-none flex flex-col items-center justify-center gap-1 ${activeBgBorderText} ${isLocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                          >
+                            <span>{st}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </Card>
         </div>
       </div>

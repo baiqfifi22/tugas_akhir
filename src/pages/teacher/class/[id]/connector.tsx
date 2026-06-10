@@ -14,6 +14,7 @@ import {
   Search,
   Loader2,
   AlertCircle,
+  ArrowLeft,
 } from "lucide-react";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -57,6 +58,7 @@ export default function TeacherConnector() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [activeView, setActiveView] = useState<"list" | "detail">("list");
 
   // ── Fetch data on mount ────────────────────────────────────────────────────
   useEffect(() => {
@@ -156,7 +158,7 @@ export default function TeacherConnector() {
         <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-12rem)] min-h-[600px]">
 
           {/* ─── Left Sidebar: Student List ──────────────────────────────── */}
-          <Card className="w-full lg:w-80 flex flex-col p-0 overflow-hidden shrink-0 h-full border-zinc-200">
+          <Card className={`w-full lg:w-80 flex flex-col p-0 overflow-hidden shrink-0 h-full border-zinc-200 ${activeView === "list" ? "flex" : "hidden lg:flex"}`}>
             {/* Search Bar */}
             <div className="p-4 border-b border-zinc-100 bg-zinc-50/50">
               <div className="relative">
@@ -200,6 +202,7 @@ export default function TeacherConnector() {
                         setIsAdding(false);
                         setNotes("");
                         setSaveError("");
+                        setActiveView("detail");
                       }}
                       className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left ${isSelected
                         ? "bg-blue-50 border border-blue-200"
@@ -246,20 +249,30 @@ export default function TeacherConnector() {
           </Card>
 
           {/* ─── Right Content ───────────────────────────────────────────── */}
-          <Card className="flex-1 flex flex-col p-0 overflow-hidden h-full border-zinc-200">
+          <Card className={`flex-1 flex flex-col p-0 overflow-hidden h-full border-zinc-200 ${activeView === "detail" ? "flex" : "hidden lg:flex"}`}>
             {selectedStudent ? (
               <>
                 {/* Student Header */}
-                <div className="p-6 border-b border-zinc-100 flex items-center justify-between bg-white shrink-0">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg">
+                <div className="p-4 md:p-6 border-b border-zinc-100 flex items-center justify-between gap-4 bg-white shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {/* Back Button on Mobile */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveView("list")}
+                      className="lg:hidden p-2 -ml-1 rounded-lg text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 transition-colors shrink-0"
+                      aria-label="Kembali ke daftar siswa"
+                    >
+                      <ArrowLeft size={20} />
+                    </button>
+                    {/* Hide avatar circle on mobile/tablet to save space, show on md+ */}
+                    <div className="hidden md:flex w-10 h-10 rounded-full bg-blue-100 items-center justify-center text-blue-600 font-bold text-sm shrink-0">
                       {selectedStudent.avatar}
                     </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-zinc-900">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-sm sm:text-base md:text-lg font-bold text-zinc-900 leading-tight truncate">
                         {selectedStudent.name}
                       </h2>
-                      <p className="text-sm text-zinc-500">
+                      <p className="text-xs sm:text-sm text-zinc-500 mt-0.5 truncate">
                         Kelas {kelasNama} · NIS {selectedStudent.nis}
                       </p>
                     </div>
@@ -272,8 +285,9 @@ export default function TeacherConnector() {
                         setIsAdding(true);
                         setSaveError("");
                       }}
+                      className="shrink-0 justify-center text-xs sm:text-sm py-2 px-3 sm:py-2.5 sm:px-4"
                     >
-                      <Plus size={18} />
+                      <Plus size={16} />
                       Buat Laporan
                     </Button>
                   )}
@@ -430,6 +444,14 @@ export default function TeacherConnector() {
               </>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-zinc-300 p-8 gap-4">
+                {/* Back Button on Mobile */}
+                <button
+                  type="button"
+                  onClick={() => setActiveView("list")}
+                  className="lg:hidden flex items-center gap-2 px-4 py-2 border border-zinc-200 rounded-lg text-zinc-600 hover:bg-zinc-50 font-medium text-sm transition-colors"
+                >
+                  <ArrowLeft size={16} /> Kembali ke Daftar Siswa
+                </button>
                 <User size={56} className="opacity-30" />
                 <div className="text-center">
                   <p className="text-zinc-500 font-medium">Pilih Siswa</p>

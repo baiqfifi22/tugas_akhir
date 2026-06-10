@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/withAuth";
 import { Layout } from "@/components/Layout";
 import { Card } from "@/components/ui/Card";
 import { TableWrapper, Thead, Th, Tbody, Tr, Td } from "@/components/ui/Table";
+import Link from "next/link";
 import {
   Calendar,
   UserCheck,
@@ -14,6 +15,7 @@ import {
   User,
   Loader2,
   AlertCircle,
+  ExternalLink,
 } from "lucide-react";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -44,11 +46,13 @@ interface NarrativeReport {
 }
 
 export default function ParentAttendance() {
-  const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [filterType, setFilterType] = useState<"tahun" | "bulan">("tahun");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [availableMonths, setAvailableMonths] = useState<{ value: string; label: string }[]>([]);
+  const [academicYearName, setAcademicYearName] = useState("");
 
-  const [monthFilter, setMonthFilter] = useState(defaultMonth);
-  const [attendanceData, setAttendanceData] = useState<AttendanceRow[]>([]);
+
+  const [todayAttendance, setTodayAttendance] = useState<AttendanceRow[]>([]);
   const [stats, setStats] = useState<MonthlyStats>({ hadir: 0, sakit: 0, izin: 0, alpa: 0 });
   const [report, setReport] = useState<NarrativeReport | null>(null);
   const [childName, setChildName] = useState("");
@@ -60,22 +64,46 @@ export default function ParentAttendance() {
     setIsLoading(true);
     setError("");
 
-    fetch(`/api/parent/attendance?month=${monthFilter}`)
+    const now = new Date();
+    const localYear = now.getFullYear();
+    const localMonth = String(now.getMonth() + 1).padStart(2, "0");
+    const localDay = String(now.getDate()).padStart(2, "0");
+    const todayStr = `${localYear}-${localMonth}-${localDay}`;
+
+    let url = `/api/parent/attendance?view=${filterType}&today=${todayStr}`;
+    if (filterType === "bulan" && selectedMonth) {
+      url += `&month=${selectedMonth}`;
+    }
+
+    fetch(url)
       .then((r) => r.json())
       .then((data) => {
         if (!data.success) throw new Error(data.message || "Gagal memuat data");
         setChildName(data.childName || "");
         setChildNis(data.childNis || "");
-        setAttendanceData(data.attendanceData || []);
+
+        setTodayAttendance(data.todayAttendance || []);
         setStats(data.stats || { hadir: 0, sakit: 0, izin: 0, alpa: 0 });
         setReport(data.report || null);
+        if (data.availableMonths) {
+          setAvailableMonths(data.availableMonths);
+        }
+        if (data.academicYearName) {
+          setAcademicYearName(data.academicYearName);
+        }
+        // Set default selectedMonth if empty and months are available
+        if (!selectedMonth && data.availableMonths && data.availableMonths.length > 0) {
+          const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+          const hasCurrentMonth = data.availableMonths.some((m: any) => m.value === currentMonthStr);
+          setSelectedMonth(hasCurrentMonth ? currentMonthStr : data.availableMonths[0].value);
+        }
       })
       .catch((err) => {
         console.error(err);
         setError("Gagal memuat data kehadiran. Coba refresh halaman.");
       })
       .finally(() => setIsLoading(false));
-  }, [monthFilter]);
+  }, [filterType, selectedMonth]);
 
   const getStatusStyle = (status: string) => {
     if (status === "Hadir") return "bg-emerald-100 text-emerald-800";
@@ -105,25 +133,79 @@ export default function ParentAttendance() {
             )}
           </p>
         </div>
+        {childName && (
+          <Link
+            href="/parent/attendance-full"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-lg shadow-sm transition-colors shrink-0"
+          >
+            <ExternalLink size={16} />
+            Lihat Riwayat Kehadiran Lengkap
+          </Link>
+        )}
       </div>
 
-      {/* Filter Bulan */}
-      <Card className="mb-6 p-4 flex flex-col sm:flex-row gap-4 items-center bg-blue-50/50 border-blue-100">
-        <Calendar size={18} className="text-blue-600" />
-        <span className="text-sm font-bold text-zinc-900">Pilih Bulan:</span>
-        <input
-          type="month"
-          id="filter-bulan"
-          value={monthFilter}
-          onChange={(e) => setMonthFilter(e.target.value)}
-          className="border border-blue-200 rounded-lg px-3 py-2 text-sm text-zinc-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white shadow-sm"
-        />
+      {/* Filter Mode */}
+      <Card className="mb-6 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-blue-50/40 border-blue-100/80">
+        <div className="flex flex-wrap items-center gap-3">
+          <Calendar size={18} className="text-blue-600 animate-pulse" />
+          <span className="text-sm font-bold text-zinc-900 mr-2">Rekap Absensi:</span>
+          
+          {/* Segmented Controls */}
+          <div className="inline-flex rounded-lg p-0.5 bg-zinc-100 border border-zinc-200">
+            <button
+              type="button"
+              onClick={() => setFilterType("tahun")}
+              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all duration-200 ${
+                filterType === "tahun"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              Tahun Ajaran
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterType("bulan")}
+              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all duration-200 ${
+                filterType === "bulan"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              Per Bulan
+            </button>
+          </div>
+
+          {/* Month Selector Dropdown - Only show if filterType === "bulan" */}
+          {filterType === "bulan" && availableMonths.length > 0 && (
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="border border-blue-200 rounded-lg px-3 py-1.5 text-xs text-zinc-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white shadow-sm"
+            >
+              {availableMonths.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Display active academic year name if selected */}
+          {filterType === "tahun" && academicYearName && (
+            <span className="text-xs bg-blue-100/70 text-blue-700 px-3 py-1.5 rounded-lg font-bold border border-blue-200/50">
+              {academicYearName}
+            </span>
+          )}
+        </div>
+
         {!isLoading && totalAbsensi > 0 && (
-          <span className="text-sm text-zinc-500 ml-auto">
+          <span className="text-sm text-zinc-500 font-medium">
             Tingkat kehadiran:{" "}
             <span
-              className={`font-bold ${pctHadir >= 80 ? "text-emerald-600" : pctHadir >= 60 ? "text-yellow-600" : "text-red-600"
-                }`}
+              className={`font-black ${
+                pctHadir >= 80 ? "text-emerald-600" : pctHadir >= 60 ? "text-yellow-600" : "text-red-600"
+              }`}
             >
               {pctHadir}%
             </span>
@@ -197,33 +279,38 @@ export default function ParentAttendance() {
             <div className="lg:col-span-2">
               <Card className="p-0 overflow-hidden h-full">
                 <div className="px-6 py-4 border-b border-zinc-200 bg-white flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-zinc-900">Detail Kehadiran</h2>
+                  <h2 className="text-lg font-bold text-zinc-900">Detail Kehadiran Hari Ini</h2>
                   <span className="text-xs text-zinc-400">
-                    {attendanceData.length} catatan
+                    {todayAttendance.length} catatan
                   </span>
                 </div>
                 <TableWrapper>
                   <Thead>
                     <Tr>
-                      <Th>Tanggal</Th>
-                      <Th>Hari</Th>
+                      <Th>Hari & Tanggal</Th>
+                      <Th>Mata Pelajaran</Th>
                       <Th>Status</Th>
                       <Th>Keterangan</Th>
                     </Tr>
                   </Thead>
                   <Tbody>
-                    {attendanceData.length === 0 ? (
+                    {todayAttendance.length === 0 ? (
                       <Tr>
                         <Td colSpan={4} className="text-center py-10 text-zinc-400">
                           <CalendarDays size={32} className="mx-auto mb-2 opacity-20" />
-                          Belum ada data kehadiran bulan ini.
+                          Belum ada data kehadiran untuk hari ini.
                         </Td>
                       </Tr>
                     ) : (
-                      attendanceData.map((row, idx) => (
+                      todayAttendance.map((row, idx) => (
                         <Tr key={idx}>
-                          <Td className="text-zinc-500 whitespace-nowrap">{row.date}</Td>
-                          <Td className="font-medium text-zinc-900">{row.day}</Td>
+                          <Td>
+                            <div className="font-semibold text-zinc-900 text-sm">{row.date}</div>
+                            <div className="text-xs text-zinc-400">{row.day}</div>
+                          </Td>
+                          <Td className="text-zinc-700 font-medium text-xs sm:text-sm">
+                            {row.mapel ? row.mapel.replace(/_/g, " ") : "—"}
+                          </Td>
                           <Td>
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${getStatusStyle(row.status)}`}

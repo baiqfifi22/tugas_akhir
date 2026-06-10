@@ -9,6 +9,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!auth) return;
 
   try {
+    const { scope = "weekly" } = req.query;
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const localTodayStr = `${year}-${month}-${day}`;
+    const todayStart = new Date(`${localTodayStr}T00:00:00.000Z`);
+    const todayEnd = new Date(`${localTodayStr}T23:59:59.999Z`);
+
     const [totalGuru, totalSiswa, totalKelas, totalSesiHariIni] = await Promise.all([
       prisma.guru.count({ where: { status: "AKTIF" } }),
       prisma.siswa.count({ where: { status: "AKTIF" } }),
@@ -16,62 +26,163 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       prisma.sesiAbsensi.count({
         where: {
           tanggal: {
-            gte: new Date(new Date().setUTCHours(0, 0, 0, 0)),
-            lte: new Date(new Date().setUTCHours(23, 59, 59, 999)),
+            gte: todayStart,
+            lte: todayEnd,
           },
         },
       }),
     ]);
 
-    // 10 sesi absensi terbaru
-    const recentSesi = await prisma.sesiAbsensi.findMany({
-      take: 10,
-      orderBy: { tanggal: "desc" },
-      include: {
-        guru: true,
-        kelas: true,
-        absensi: true,
+    // Ambil semua kelas aktif
+    const classes = await prisma.kelas.findMany({
+      orderBy: { nama: "asc" },
+    });
+
+    // Cari kelas unik yang sudah melakukan absensi hari ini
+    const uniqueSesiHariIni = await prisma.sesiAbsensi.findMany({
+      where: {
+        tanggal: {
+          gte: todayStart,
+          lte: todayEnd,
+        },
+      },
+      select: {
+        kelasId: true,
+      },
+      distinct: ["kelasId"],
+    });
+
+    const totalKelasAbsenHariIni = uniqueSesiHariIni.length;
+
+    // Filter kelas yang belum absen hari ini
+    const kelasBelumAbsen = classes
+      .filter((c) => !uniqueSesiHariIni.some((us) => us.kelasId === c.id))
+      .map((c) => c.nama);
+
+    // Tentukan range tanggal berdasarkan scope
+    let startDate = new Date();
+    let endDate = new Date();
+
+    if (scope === "weekly") {
+      startDate.setDate(startDate.getDate() - 6);
+      startDate.setUTCHours(0, 0, 0, 0);
+      endDate.setUTCHours(23, 59, 59, 999);
+    } else if (scope === "monthly") {
+      startDate.setDate(startDate.getDate() - 29);
+      startDate.setUTCHours(0, 0, 0, 0);
+      endDate.setUTCHours(23, 59, 59, 999);
+    } else if (scope === "yearly") {
+      const activeYear = await prisma.tahunAjaran.findFirst({
+        where: { isActive: true },
+      });
+      if (activeYear) {
+        startDate = new Date(activeYear.mulai);
+        endDate = new Date(activeYear.selesai);
+      } else {
+        // Fallback 12 bulan terakhir
+        startDate.setMonth(startDate.getMonth() - 11);
+        startDate.setDate(1);
+        startDate.setUTCHours(0, 0, 0, 0);
+        endDate.setUTCHours(23, 59, 59, 999);
+      }
+    }
+
+    // Ambil data absensi dalam range tanggal tersebut
+    const sessions = await prisma.sesiAbsensi.findMany({
+      where: {
+        tanggal: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      select: {
+        tanggal: true,
+        absensi: {
+          select: {
+            status: true,
+          },
+        },
       },
     });
 
-    const logs = recentSesi.map((s) => ({
-      id: s.id,
-      date: s.tanggal.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }),
-      cls: s.kelas.nama,
-      teacher: s.guru.nama,
-      subject: s.mataPelajaran,
-      present: s.absensi.filter((a) => a.status === "HADIR").length,
-      absent: s.absensi.filter((a) => a.status !== "HADIR").length,
-      total: s.absensi.length,
-    }));
-
-    // Grafik kehadiran 7 hari terakhir
+    // Bangun data grafik berdasarkan scope
     const chartData = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dayStart = new Date(d); dayStart.setUTCHours(0, 0, 0, 0);
-      const dayEnd = new Date(d); dayEnd.setUTCHours(23, 59, 59, 999);
 
-      const sesiList = await prisma.sesiAbsensi.findMany({
-        where: { tanggal: { gte: dayStart, lte: dayEnd } },
-        include: { absensi: true },
-      });
+    if (scope === "yearly") {
+      const current = new Date(startDate);
+      current.setDate(1);
+      current.setUTCHours(0, 0, 0, 0);
+      const limit = new Date(endDate);
 
-      const hadir = sesiList.reduce((sum, s) => sum + s.absensi.filter((a) => a.status === "HADIR").length, 0);
-      const absen = sesiList.reduce((sum, s) => sum + s.absensi.filter((a) => a.status !== "HADIR").length, 0);
+      while (current <= limit) {
+        const year = current.getFullYear();
+        const month = current.getMonth();
 
-      chartData.push({
-        label: d.toLocaleDateString("id-ID", { weekday: "short", day: "numeric" }),
-        hadir,
-        absen,
-      });
+        const monthSessions = sessions.filter((s) => {
+          const d = new Date(s.tanggal);
+          return d.getFullYear() === year && d.getMonth() === month;
+        });
+
+        let hadir = 0;
+        let absen = 0;
+        for (const s of monthSessions) {
+          for (const a of s.absensi) {
+            if (a.status === "HADIR") hadir++;
+            else absen++;
+          }
+        }
+
+        chartData.push({
+          label: current.toLocaleDateString("id-ID", { month: "short", year: "numeric" }),
+          hadir,
+          absen,
+        });
+
+        current.setMonth(current.getMonth() + 1);
+      }
+    } else {
+      const tempDate = new Date(startDate);
+      while (tempDate <= endDate) {
+        const dayStart = new Date(tempDate); dayStart.setUTCHours(0, 0, 0, 0);
+        const dayEnd = new Date(tempDate); dayEnd.setUTCHours(23, 59, 59, 999);
+
+        const daySessions = sessions.filter(
+          (s) => s.tanggal >= dayStart && s.tanggal <= dayEnd
+        );
+
+        let hadir = 0;
+        let absen = 0;
+        for (const s of daySessions) {
+          for (const a of s.absensi) {
+            if (a.status === "HADIR") hadir++;
+            else absen++;
+          }
+        }
+
+        chartData.push({
+          label: tempDate.toLocaleDateString("id-ID", {
+            day: "numeric",
+            month: "short",
+            weekday: scope === "weekly" ? "short" : undefined,
+          }),
+          hadir,
+          absen,
+        });
+
+        tempDate.setDate(tempDate.getDate() + 1);
+      }
     }
 
     return res.status(200).json({
       success: true,
-      stats: { totalGuru, totalSiswa, totalKelas, totalSesiHariIni },
-      logs,
+      stats: {
+        totalGuru,
+        totalSiswa,
+        totalKelas,
+        totalSesiHariIni,
+        totalKelasAbsenHariIni,
+      },
+      kelasBelumAbsen,
       chartData,
     });
   } catch (error) {

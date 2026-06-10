@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
-import Image from "next/image";
+
 
 export default function Home() {
   const router = useRouter();
@@ -45,21 +45,21 @@ export default function Home() {
   return (
     <div className="min-h-screen flex">
       <div className="w-1/2 hidden md:flex items-center justify-center bg-white">
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src="/login_photo.png"
           alt="login illustration"
           className="w-full"
-          priority
         />
       </div>
 
       <div className="w-full md:w-1/2 flex flex-col justify-center items-center bg-gradient-to-br from-orange-100 via-yellow-100 to-green-100 p-10 relative">
         {/* LOGO */}
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src="/logo.png"
           alt="logo"
           className="absolute top-7 right-10 w-20 md:w-24"
-          priority
         />
 
         {/* HEADER */}

@@ -10,9 +10,11 @@ import {
   BarChart2,
   Calendar,
   CheckCircle2,
-  RefreshCw,
   Users,
   TrendingUp,
+  Download,
+  X,
+  Loader2,
 } from "lucide-react";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -22,6 +24,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 };
 
 interface SummaryRow {
+  id: number;
   name: string;
   mon: string;
   tue: string;
@@ -80,22 +83,36 @@ export default function ClassRekap() {
   const { id } = router.query;
   const classId = typeof id === "string" ? id : "";
 
+  // ── States ─────────────────────────────────────────────────────────────────
   const [weekFilter, setWeekFilter] = useState("");
+  const [viewMode, setViewMode] = useState<"weekly" | "yearly">("weekly");
   const [rekapData, setRekapData] = useState<RekapData | null>(null);
+  const [yearlyData, setYearlyData] = useState<any | null>(null);
   const [kelasNama, setKelasNama] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const fetchRekap = useCallback(async (kelasId: string, week: string) => {
+  // Detail Modal States
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
+  const [studentDetail, setStudentDetail] = useState<any | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  // ── Fetch Data ─────────────────────────────────────────────────────────────
+  const fetchRekap = useCallback(async (kelasId: string, mode: "weekly" | "yearly", week: string) => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(
-        `/api/teacher/class/${kelasId}/rekap?week=${week}`
-      );
+      const url = mode === "yearly"
+        ? `/api/teacher/class/${kelasId}/rekap?yearly=true`
+        : `/api/teacher/class/${kelasId}/rekap?week=${week}`;
+      const res = await fetch(url);
       const data = await res.json();
       if (res.ok && data.success) {
-        setRekapData(data);
+        if (mode === "yearly") {
+          setYearlyData(data);
+        } else {
+          setRekapData(data);
+        }
         if (data.kelasNama) setKelasNama(data.kelasNama);
       } else {
         setError(data.message || "Gagal memuat data rekap");
@@ -107,20 +124,77 @@ export default function ClassRekap() {
     }
   }, []);
 
+  // Fetch Student Detail for Modal
+  useEffect(() => {
+    if (!selectedStudentId || !classId) return;
+    setLoadingDetail(true);
+    setStudentDetail(null);
+    fetch(`/api/teacher/class/${classId}/rekap?studentId=${selectedStudentId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          setStudentDetail(data);
+        } else {
+          console.error(data.message);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoadingDetail(false));
+  }, [selectedStudentId, classId]);
+
   useEffect(() => {
     const currentWeek = getISOWeek(new Date());
     setWeekFilter(currentWeek);
   }, []);
 
   useEffect(() => {
-    if (classId && weekFilter) {
-      fetchRekap(classId, weekFilter);
+    if (classId && (viewMode === "yearly" || weekFilter)) {
+      fetchRekap(classId, viewMode, weekFilter);
     }
-  }, [classId, weekFilter, fetchRekap]);
+  }, [classId, viewMode, weekFilter, fetchRekap]);
+
+  // ── CSV Export Function ────────────────────────────────────────────────────
+  const downloadCSV = () => {
+    if (!yearlyData) return;
+    const headers = [
+      "No",
+      "Nama Siswa",
+      "NIS",
+      "Hadir (H)",
+      "Sakit (S)",
+      "Izin (I)",
+      "Alpa (A)",
+      "Total Sesi",
+      "Persentase Kehadiran",
+    ];
+    const csvRows = [
+      headers.join(","),
+      ...yearlyData.summaryData.map((row: any, idx: number) => [
+        idx + 1,
+        row.name,
+        `'${row.nis}`, // Format NIS sebagai teks agar leading zero tidak hilang di Excel
+        row.hadir,
+        row.sakit,
+        row.izin,
+        row.alpa,
+        row.total,
+        `${row.pct}%`,
+      ].map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","))
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Rekap_Kehadiran_Kelas_${kelasNama.replace(/\s+/g, "_")}_Tahun_${yearlyData.tahunAjaranNama.replace(/\s+/g, "_")}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const days = ["mon", "tue", "wed", "thu", "fri"] as const;
 
-  // Bar chart: gunakan dailyPercent jika ada data, jika tidak 0
   const barData = rekapData
     ? days.map((d) => ({ day: DAY_LABELS[d], pct: rekapData.dailyPercent[d] ?? 0 }))
     : days.map((d) => ({ day: DAY_LABELS[d], pct: 0 }));
@@ -136,13 +210,13 @@ export default function ClassRekap() {
             Rekap Kehadiran — Kelas {(kelasNama || "...").toUpperCase()}
           </h1>
           <p className="text-zinc-500">
-            Rekapitulasi kehadiran siswa per minggu.
+            Rekapitulasi kehadiran siswa dalam 1 minggu atau 1 tahun ajaran aktif.
           </p>
         </div>
       </div>
 
-      {/* Kartu Summary Hari Ini */}
-      {rekapData?.todaySummary?.sudahAbsen && (
+      {/* Kartu Summary Hari Ini (Hanya di mode mingguan) */}
+      {viewMode === "weekly" && rekapData?.todaySummary?.sudahAbsen && (
         <Card className="mb-6 border-emerald-200 bg-emerald-50/70">
           <div className="flex items-start gap-3">
             <CheckCircle2 size={20} className="text-emerald-600 flex-shrink-0 mt-0.5" />
@@ -172,21 +246,39 @@ export default function ClassRekap() {
         </Card>
       )}
 
-      {/* Filter Minggu */}
-      <Card className="mb-6 p-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <Calendar size={16} className="text-zinc-500" />
-          <span className="text-sm font-medium text-zinc-700">Filter Minggu:</span>
-          <input
-            type="week"
-            value={weekFilter}
-            onChange={(e) => setWeekFilter(e.target.value)}
-            className="border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-          />
+      {/* Filter Mode & Waktu */}
+      <Card className="mb-6 p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="flex flex-col sm:flex-row gap-4 items-center w-full md:w-auto">
+          {/* Dropdown Mode Rekap */}
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            <span className="text-sm font-bold text-zinc-700 whitespace-nowrap">Mode Rekap:</span>
+            <select
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value as any)}
+              className="w-full sm:w-auto border border-zinc-200 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer bg-white"
+            >
+              <option value="weekly">Rekap Mingguan</option>
+              <option value="yearly">1 Tahun Ajaran Aktif</option>
+            </select>
+          </div>
+
+          {/* Filter Minggu (Hanya tampil di mode weekly) */}
+          {viewMode === "weekly" && (
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Calendar size={16} className="text-zinc-500 shrink-0" />
+              <input
+                type="week"
+                value={weekFilter}
+                onChange={(e) => setWeekFilter(e.target.value)}
+                className="w-full sm:w-auto border border-zinc-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white"
+              />
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-4">
-          {rekapData && (
-            <div className="flex items-center gap-2 text-sm text-zinc-500">
+
+        <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+          {viewMode === "weekly" && rekapData && (
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-zinc-500">
               <Users size={14} />
               <span>{rekapData.totalSiswa} siswa</span>
               <span className="mx-1">·</span>
@@ -194,19 +286,31 @@ export default function ClassRekap() {
               <span>{rekapData.totalSesi} sesi</span>
             </div>
           )}
-          <Button
-            variant="outline"
-            onClick={() => classId && weekFilter && fetchRekap(classId, weekFilter)}
-          >
-            <RefreshCw size={16} /> Refresh
-          </Button>
+
+          {viewMode === "yearly" && yearlyData && (
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-zinc-500">
+              <Users size={14} />
+              <span>{yearlyData.summaryData?.length || 0} siswa</span>
+            </div>
+          )}
+
+          {/* Button Download CSV (Hanya tampil di mode yearly) */}
+          {viewMode === "yearly" && yearlyData && (
+            <Button
+              variant="outline"
+              onClick={downloadCSV}
+              className="flex items-center gap-2 text-xs sm:text-sm py-2 px-3 shrink-0 justify-center w-full sm:w-auto"
+            >
+              <Download size={16} /> Unduh Laporan (.csv)
+            </Button>
+          )}
         </div>
       </Card>
 
       {/* Loading / Error state */}
       {loading && (
         <Card className="mb-6 py-12 text-center text-zinc-400">
-          <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
+          <Loader2 size={24} className="animate-spin mx-auto mb-2 text-blue-500" />
           <p className="text-sm">Memuat data rekap...</p>
         </Card>
       )}
@@ -216,148 +320,343 @@ export default function ClassRekap() {
         </Card>
       )}
 
-      {!loading && !error && rekapData && (
+      {/* Render Main Content */}
+      {!loading && !error && (
         <>
-          {/* Bar Chart Kehadiran */}
-          <h2 className="text-lg font-bold text-zinc-900 mb-4 flex items-center gap-2">
-            <BarChart2 size={18} className="text-blue-600" />
-            Persentase Kehadiran Minggu Ini
-          </h2>
-          <Card className="mb-8">
-            {rekapData.totalSesi === 0 ? (
-              <div className="h-48 flex items-center justify-center text-zinc-400 text-sm">
-                Belum ada sesi absensi pada minggu ini
-              </div>
-            ) : (
-              <div className="h-56 flex items-end gap-4 pt-8 px-2 relative">
-                <div className="absolute top-4 left-4 text-xs font-medium text-zinc-400">
-                  % Kehadiran
-                </div>
-                {barData.map(({ day, pct }) => (
-                  <div
-                    key={day}
-                    className="flex-1 flex flex-col items-center gap-2"
-                  >
-                    <span className="text-sm font-bold text-blue-600">
-                      {pct > 0 ? `${pct}%` : ""}
-                    </span>
-                    <div className="w-full bg-zinc-100 rounded-t-lg relative h-40 flex items-end">
-                      <div
-                        style={{ height: `${(pct / maxPct) * 100}%` }}
-                        className={`w-full rounded-t-lg transition-all duration-500 ${
-                          pct >= 80
-                            ? "bg-emerald-500"
-                            : pct >= 60
-                            ? "bg-yellow-400"
-                            : pct > 0
-                            ? "bg-red-400"
-                            : "bg-zinc-200"
-                        }`}
-                      />
+          {/* 1. VIEW MODE WEEKLY */}
+          {viewMode === "weekly" && rekapData && (
+            <>
+              {/* Bar Chart Kehadiran */}
+              <h2 className="text-lg font-bold text-zinc-900 mb-4 flex items-center gap-2">
+                <BarChart2 size={18} className="text-blue-600" />
+                Persentase Kehadiran Minggu Ini
+              </h2>
+              <Card className="mb-8">
+                {rekapData.totalSesi === 0 ? (
+                  <div className="h-48 flex items-center justify-center text-zinc-400 text-sm">
+                    Belum ada sesi absensi pada minggu ini
+                  </div>
+                ) : (
+                  <div className="h-56 flex items-end gap-4 pt-8 px-2 relative">
+                    <div className="absolute top-4 left-4 text-xs font-medium text-zinc-400">
+                      % Kehadiran
                     </div>
-                    <span className="text-xs text-zinc-500 font-medium">{day}</span>
+                    {barData.map(({ day, pct }) => (
+                      <div
+                        key={day}
+                        className="flex-1 flex flex-col items-center gap-2"
+                      >
+                        <span className="text-sm font-bold text-blue-600">
+                          {pct > 0 ? `${pct}%` : ""}
+                        </span>
+                        <div className="w-full bg-zinc-100 rounded-t-lg relative h-40 flex items-end">
+                          <div
+                            style={{ height: `${(pct / maxPct) * 100}%` }}
+                            className={`w-full rounded-t-lg transition-all duration-500 ${
+                              pct >= 80
+                                ? "bg-emerald-500"
+                                : pct >= 60
+                                ? "bg-yellow-400"
+                                : pct > 0
+                                ? "bg-red-400"
+                                : "bg-zinc-200"
+                            }`}
+                          />
+                        </div>
+                        <span className="text-xs text-zinc-500 font-medium">{day}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* Tabel Detail Per Siswa (Mingguan) */}
+              <h2 className="text-lg font-bold text-zinc-900 mb-4 flex items-center gap-2">
+                <Calendar size={18} className="text-blue-600" />
+                Detail Kehadiran Siswa (Ketuk nama siswa untuk detail 1 tahun)
+              </h2>
+              <Card className="p-0 overflow-hidden mb-4">
+                <TableWrapper>
+                  <Thead>
+                    <Tr>
+                      <Th>No</Th>
+                      <Th>Nama Siswa</Th>
+                      {days.map((d) => (
+                        <Th key={d} className="text-center w-20">
+                          {DAY_LABELS[d]}
+                        </Th>
+                      ))}
+                      <Th className="text-center">H</Th>
+                      <Th className="text-center">%</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {rekapData.summaryData.length === 0 ? (
+                      <Tr>
+                        <Td colSpan={9} className="text-center text-zinc-400 py-8">
+                          Belum ada data kehadiran untuk minggu ini
+                        </Td>
+                      </Tr>
+                    ) : (
+                      rekapData.summaryData.map((row, idx) => {
+                        const hadirCount = days.filter((d) => row[d] === "H").length;
+                        const hasDataDays = days.filter((d) => row[d] !== "-").length;
+                        const pctHadir = hasDataDays > 0
+                          ? Math.round((hadirCount / hasDataDays) * 100)
+                          : null;
+
+                        return (
+                          <Tr key={idx}>
+                            <Td className="text-zinc-400 text-sm w-10">{idx + 1}</Td>
+                            <Td className="font-semibold">
+                              <span
+                                className="text-blue-600 hover:underline cursor-pointer"
+                                onClick={() => setSelectedStudentId(row.id)}
+                              >
+                                {row.name}
+                              </span>
+                            </Td>
+                            {days.map((d) => (
+                              <Td key={d} className="text-center">
+                                <span
+                                  className={`inline-flex w-8 h-8 items-center justify-center rounded-lg font-bold text-xs ${
+                                    STATUS_STYLE[row[d]] ?? STATUS_STYLE["-"]
+                                  }`}
+                                >
+                                  {row[d]}
+                                </span>
+                              </Td>
+                            ))}
+                            <Td className="text-center font-bold text-emerald-600">
+                              {hadirCount}
+                            </Td>
+                            <Td className="text-center">
+                              {pctHadir !== null ? (
+                                <span
+                                  className={`text-xs font-semibold ${
+                                    pctHadir >= 80
+                                      ? "text-emerald-600"
+                                      : pctHadir >= 60
+                                      ? "text-yellow-600"
+                                      : "text-red-600"
+                                  }`}
+                                >
+                                  {pctHadir}%
+                                </span>
+                              ) : (
+                                <span className="text-zinc-300 text-xs">—</span>
+                              )}
+                            </Td>
+                          </Tr>
+                        );
+                      })
+                    )}
+                  </Tbody>
+                </TableWrapper>
+              </Card>
+
+              {/* Legend */}
+              <div className="flex gap-4 flex-wrap text-xs text-zinc-500 mt-2 px-1">
+                {[
+                  { code: "H", label: "Hadir", color: "bg-emerald-100 text-emerald-700" },
+                  { code: "S", label: "Sakit", color: "bg-yellow-100 text-yellow-700" },
+                  { code: "I", label: "Izin", color: "bg-blue-100 text-blue-700" },
+                  { code: "A", label: "Alpa", color: "bg-red-100 text-red-700" },
+                  { code: "-", label: "Tidak ada sesi", color: "bg-zinc-100 text-zinc-400" },
+                ].map(({ code, label, color }) => (
+                  <div key={code} className="flex items-center gap-1.5">
+                    <span className={`inline-flex w-6 h-6 items-center justify-center rounded font-bold text-xs ${color}`}>
+                      {code}
+                    </span>
+                    <span>{label}</span>
                   </div>
                 ))}
               </div>
-            )}
-          </Card>
+            </>
+          )}
 
-          {/* Tabel Detail Per Siswa */}
-          <h2 className="text-lg font-bold text-zinc-900 mb-4 flex items-center gap-2">
-            <Calendar size={18} className="text-blue-600" />
-            Detail Kehadiran Siswa
-          </h2>
-          <Card className="p-0 overflow-hidden mb-4">
-            <TableWrapper>
-              <Thead>
-                <Tr>
-                  <Th>No</Th>
-                  <Th>Nama Siswa</Th>
-                  {days.map((d) => (
-                    <Th key={d} className="text-center w-20">
-                      {DAY_LABELS[d]}
-                    </Th>
-                  ))}
-                  <Th className="text-center">H</Th>
-                  <Th className="text-center">%</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {rekapData.summaryData.length === 0 ? (
-                  <Tr>
-                    <Td colSpan={9} className="text-center text-zinc-400 py-8">
-                      Belum ada data kehadiran untuk minggu ini
-                    </Td>
-                  </Tr>
-                ) : (
-                  rekapData.summaryData.map((row, idx) => {
-                    const hadirCount = days.filter((d) => row[d] === "H").length;
-                    const hasDataDays = days.filter((d) => row[d] !== "-").length;
-                    const pctHadir = hasDataDays > 0
-                      ? Math.round((hadirCount / hasDataDays) * 100)
-                      : null;
-
-                    return (
-                      <Tr key={idx}>
-                        <Td className="text-zinc-400 text-sm w-10">{idx + 1}</Td>
-                        <Td className="font-medium text-zinc-900">{row.name}</Td>
-                        {days.map((d) => (
-                          <Td key={d} className="text-center">
-                            <span
-                              className={`inline-flex w-8 h-8 items-center justify-center rounded-lg font-bold text-xs ${
-                                STATUS_STYLE[row[d]] ?? STATUS_STYLE["-"]
-                              }`}
-                            >
-                              {row[d]}
-                            </span>
-                          </Td>
-                        ))}
-                        <Td className="text-center font-bold text-emerald-600">
-                          {hadirCount}
-                        </Td>
-                        <Td className="text-center">
-                          {pctHadir !== null ? (
-                            <span
-                              className={`text-xs font-semibold ${
-                                pctHadir >= 80
-                                  ? "text-emerald-600"
-                                  : pctHadir >= 60
-                                  ? "text-yellow-600"
-                                  : "text-red-600"
-                              }`}
-                            >
-                              {pctHadir}%
-                            </span>
-                          ) : (
-                            <span className="text-zinc-300 text-xs">—</span>
-                          )}
+          {/* 2. VIEW MODE YEARLY */}
+          {viewMode === "yearly" && yearlyData && (
+            <>
+              <h2 className="text-lg font-bold text-zinc-900 mb-4 flex items-center gap-2">
+                <Calendar size={18} className="text-blue-600" />
+                Rangkuman 1 Tahun Ajaran Aktif ({yearlyData.tahunAjaranNama})
+              </h2>
+              <Card className="p-0 overflow-hidden mb-4">
+                <TableWrapper>
+                  <Thead>
+                    <Tr>
+                      <Th>No</Th>
+                      <Th>Nama Siswa</Th>
+                      <Th>NIS</Th>
+                      <Th className="text-center">Hadir (H)</Th>
+                      <Th className="text-center">Sakit (S)</Th>
+                      <Th className="text-center">Izin (I)</Th>
+                      <Th className="text-center">Alpa (A)</Th>
+                      <Th className="text-center">Total Sesi</Th>
+                      <Th className="text-center">Persentase</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {yearlyData.summaryData.length === 0 ? (
+                      <Tr>
+                        <Td colSpan={9} className="text-center text-zinc-400 py-8">
+                          Belum ada data kehadiran untuk tahun ajaran aktif ini.
                         </Td>
                       </Tr>
-                    );
-                  })
-                )}
-              </Tbody>
-            </TableWrapper>
-          </Card>
-
-          {/* Legend */}
-          <div className="flex gap-4 flex-wrap text-xs text-zinc-500 mt-2 px-1">
-            {[
-              { code: "H", label: "Hadir", color: "bg-emerald-100 text-emerald-700" },
-              { code: "S", label: "Sakit", color: "bg-yellow-100 text-yellow-700" },
-              { code: "I", label: "Izin", color: "bg-blue-100 text-blue-700" },
-              { code: "A", label: "Alpa", color: "bg-red-100 text-red-700" },
-              { code: "-", label: "Tidak ada sesi", color: "bg-zinc-100 text-zinc-400" },
-            ].map(({ code, label, color }) => (
-              <div key={code} className="flex items-center gap-1.5">
-                <span className={`inline-flex w-6 h-6 items-center justify-center rounded font-bold text-xs ${color}`}>
-                  {code}
-                </span>
-                <span>{label}</span>
-              </div>
-            ))}
-          </div>
+                    ) : (
+                      yearlyData.summaryData.map((row: any, idx: number) => (
+                        <Tr key={idx}>
+                          <Td className="text-zinc-400 text-sm w-10">{idx + 1}</Td>
+                          <Td className="font-semibold">
+                            <span
+                              className="text-blue-600 hover:underline cursor-pointer"
+                              onClick={() => setSelectedStudentId(row.id)}
+                            >
+                              {row.name}
+                            </span>
+                          </Td>
+                          <Td className="text-zinc-500 text-sm font-medium">{row.nis}</Td>
+                          <Td className="text-center font-bold text-emerald-600">{row.hadir}</Td>
+                          <Td className="text-center font-bold text-yellow-600">{row.sakit}</Td>
+                          <Td className="text-center font-bold text-blue-600">{row.izin}</Td>
+                          <Td className="text-center font-bold text-red-500">{row.alpa}</Td>
+                          <Td className="text-center text-zinc-500 font-semibold">{row.total}</Td>
+                          <Td className="text-center">
+                            <span className={`text-sm font-bold ${
+                              row.pct >= 80 ? "text-emerald-600" : row.pct >= 60 ? "text-yellow-600" : "text-red-600"
+                            }`}>
+                              {row.pct}%
+                            </span>
+                          </Td>
+                        </Tr>
+                      ))
+                    )}
+                  </Tbody>
+                </TableWrapper>
+              </Card>
+            </>
+          )}
         </>
+      )}
+
+      {/* Student Detail Modal */}
+      {selectedStudentId && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <Card className="w-full max-w-xl p-0 overflow-hidden shadow-2xl border border-zinc-200 bg-white">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
+              <div>
+                <h3 className="font-bold text-lg text-zinc-900">Detail Kehadiran Siswa</h3>
+                <p className="text-xs text-zinc-500 mt-0.5">Ringkasan absensi 1 tahun ajaran aktif</p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedStudentId(null);
+                  setStudentDetail(null);
+                }}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+              {loadingDetail ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-400">
+                  <Loader2 className="animate-spin text-blue-500" size={28} />
+                  <p className="text-sm font-medium">Memuat detail absensi...</p>
+                </div>
+              ) : studentDetail ? (
+                <>
+                  {/* Student profile card */}
+                  <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-zinc-800 text-base">{studentDetail.studentName}</h4>
+                      <p className="text-xs text-zinc-500 mt-0.5">NIS: {studentDetail.nis} · Kelas {kelasNama.toUpperCase()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-black text-blue-600">{studentDetail.stats.pct}%</p>
+                      <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-wide">Persentase</p>
+                    </div>
+                  </div>
+
+                  {/* Stats Summary Box */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {[
+                      { label: "Hadir (H)", val: studentDetail.stats.hadir, color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-100" },
+                      { label: "Sakit (S)", val: studentDetail.stats.sakit, color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-100" },
+                      { label: "Izin (I)", val: studentDetail.stats.izin, color: "text-blue-700", bg: "bg-blue-50 border-blue-100" },
+                      { label: "Alpa (A)", val: studentDetail.stats.alpa, color: "text-red-700", bg: "bg-red-50 border-red-100" },
+                    ].map(({ label, val, color, bg }) => (
+                      <div key={label} className={`border rounded-xl p-3 text-center ${bg}`}>
+                        <p className={`text-xl font-bold ${color}`}>{val}</p>
+                        <p className="text-[10px] text-zinc-500 font-semibold mt-0.5">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Monthly Recap List */}
+                  <div>
+                    <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 px-1">Rincian Kehadiran Bulanan</h4>
+                    <div className="border border-zinc-100 rounded-xl overflow-hidden shadow-sm">
+                      <table className="w-full text-left border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-zinc-50 border-b border-zinc-100 text-zinc-400 text-[10px] font-bold uppercase tracking-wider">
+                            <th className="py-2.5 px-4">Bulan</th>
+                            <th className="py-2.5 px-3 text-center">H</th>
+                            <th className="py-2.5 px-3 text-center">S</th>
+                            <th className="py-2.5 px-3 text-center">I</th>
+                            <th className="py-2.5 px-3 text-center">A</th>
+                            <th className="py-2.5 px-3 text-center">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-50 text-zinc-700">
+                          {studentDetail.monthlyData.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="text-center py-4 text-zinc-400 text-xs">Belum ada rincian bulanan.</td>
+                            </tr>
+                          ) : (
+                            studentDetail.monthlyData.map((m: any, idx: number) => {
+                              const mTotal = m.hadir + m.sakit + m.izin + m.alpa;
+                              return (
+                                <tr key={idx} className="hover:bg-zinc-50/50">
+                                  <td className="py-2 px-4 font-semibold text-zinc-800">{m.month}</td>
+                                  <td className="py-2 px-3 text-center font-bold text-emerald-600">{m.hadir}</td>
+                                  <td className="py-2 px-3 text-center font-bold text-yellow-600">{m.sakit}</td>
+                                  <td className="py-2 px-3 text-center font-bold text-blue-600">{m.izin}</td>
+                                  <td className="py-2 px-3 text-center font-bold text-red-500">{m.alpa}</td>
+                                  <td className="py-2 px-3 text-center text-zinc-400 font-semibold">{mTotal}</td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-center text-red-500 py-8">Gagal memuat rincian siswa.</p>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-zinc-100 flex justify-end bg-zinc-50/50">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSelectedStudentId(null);
+                  setStudentDetail(null);
+                }}
+                className="py-1.5 px-4 text-xs font-semibold"
+              >
+                Tutup
+              </Button>
+            </div>
+          </Card>
+        </div>
       )}
     </Layout>
   );
