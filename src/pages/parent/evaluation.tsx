@@ -70,80 +70,131 @@ function LikertTable({
   disabled?: boolean;
 }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm border-collapse">
-        <thead>
-          <tr>
-            <th className="text-left py-3 px-4 font-semibold text-zinc-700 w-full border-b-2 border-zinc-200">
-              Pertanyaan
-            </th>
-            <th
-              colSpan={5}
-              className="py-3 px-2 text-center border-b-2 border-zinc-200 min-w-70"
-            >
-              <span className="text-xs font-semibold text-zinc-500 block mb-1">
-                Rentang Penilaian
-              </span>
-              <div className="flex justify-between items-center px-3">
-                <span className="text-xs text-zinc-400">Rendah</span>
-                <span className="text-xs text-zinc-400">Tinggi</span>
-              </div>
-            </th>
-          </tr>
-          <tr className="bg-zinc-50">
-            <th className="py-2 px-4 text-left text-xs font-medium text-zinc-400 border-b border-zinc-200">
-              {title}
-            </th>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <th
-                key={n}
-                className="py-2 px-0 text-center text-xs font-bold text-zinc-600 border-b border-zinc-200 w-14"
-              >
-                {n}
+    <div className="w-full">
+      {/* Desktop view: Table layout */}
+      <div className="hidden sm:block overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr>
+              <th className="text-left py-3 px-4 font-semibold text-zinc-700 w-full border-b-2 border-zinc-200">
+                Pertanyaan
               </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-100">
-          {pertanyaan.map((item) => {
-            // Key pakai aspekId agar bisa dipetakan saat submit
-            const key = `${prefix}_${item.id}`;
-            const selected = scores[key] || 0;
-            return (
-              <tr key={item.id} className="hover:bg-zinc-50 transition-colors">
-                <td className="py-4 px-4 text-zinc-700 leading-relaxed">{item.teks}</td>
+              <th
+                colSpan={5}
+                className="py-3 px-2 text-center border-b-2 border-zinc-200 min-w-[280px]"
+              >
+                <span className="text-xs font-semibold text-zinc-500 block mb-1">
+                  Rentang Penilaian
+                </span>
+                <div className="flex justify-between items-center px-3">
+                  <span className="text-xs text-zinc-400">Rendah</span>
+                  <span className="text-xs text-zinc-400">Tinggi</span>
+                </div>
+              </th>
+            </tr>
+            <tr className="bg-zinc-50">
+              <th className="py-2 px-4 text-left text-xs font-medium text-zinc-400 border-b border-zinc-200">
+                {title}
+              </th>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <th
+                  key={n}
+                  className="py-2 px-0 text-center text-xs font-bold text-zinc-600 border-b border-zinc-200 w-14"
+                >
+                  {n}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-100">
+            {pertanyaan.map((item) => {
+              const key = `${prefix}_${item.id}`;
+              const selected = scores[key] || 0;
+              return (
+                <tr key={item.id} className="hover:bg-zinc-50 transition-colors">
+                  <td className="py-4 px-4 text-zinc-700 leading-relaxed">{item.teks}</td>
+                  {[1, 2, 3, 4, 5].map((val) => {
+                    const isSelected = selected === val;
+                    return (
+                      <td key={val} className="py-4 px-0 text-center">
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => !disabled && onScore(key, val)}
+                          className={`
+                            w-9 h-9 rounded-full border-2 transition-all duration-150 mx-auto flex items-center justify-center
+                            focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-400
+                            ${disabled ? "cursor-default" : "cursor-pointer hover:border-blue-400 hover:bg-blue-50"}
+                            ${
+                              isSelected
+                                ? "bg-blue-600 border-blue-600 shadow-md shadow-blue-200"
+                                : "border-zinc-300 bg-white"
+                            }
+                          `}
+                          aria-label={`Nilai ${val} untuk pertanyaan: ${item.teks}`}
+                        >
+                          {isSelected && (
+                            <span className="w-2.5 h-2.5 rounded-full bg-white block" />
+                          )}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile view: Stacked card layout */}
+      <div className="block sm:hidden space-y-4">
+        <div className="bg-blue-50/50 border border-blue-100/70 p-3 rounded-xl mb-3 flex items-center justify-between text-xs text-blue-700 font-semibold">
+          <span>Skor 1 (Sangat Rendah)</span>
+          <span>➜</span>
+          <span>Skor 5 (Sangat Tinggi)</span>
+        </div>
+        {pertanyaan.map((item) => {
+          const key = `${prefix}_${item.id}`;
+          const selected = scores[key] || 0;
+          return (
+            <div
+              key={item.id}
+              className="p-4 bg-white border border-zinc-100 rounded-xl shadow-sm hover:border-zinc-200 transition-colors"
+            >
+              <p className="text-sm text-zinc-800 leading-relaxed font-medium mb-4">
+                {item.teks}
+              </p>
+              <div className="flex justify-between items-center gap-2 max-w-xs mx-auto">
                 {[1, 2, 3, 4, 5].map((val) => {
                   const isSelected = selected === val;
                   return (
-                    <td key={val} className="py-4 px-0 text-center">
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => !disabled && onScore(key, val)}
-                        className={`
-                          w-9 h-9 rounded-full border-2 transition-all duration-150 mx-auto flex items-center justify-center
-                          focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-400
-                          ${disabled ? "cursor-default" : "cursor-pointer hover:border-blue-400 hover:bg-blue-50"}
-                          ${
-                            isSelected
-                              ? "bg-blue-600 border-blue-600 shadow-md shadow-blue-200"
-                              : "border-zinc-300 bg-white"
-                          }
-                        `}
-                        aria-label={`Nilai ${val} untuk pertanyaan: ${item.teks}`}
-                      >
-                        {isSelected && (
-                          <span className="w-2.5 h-2.5 rounded-full bg-white block" />
-                        )}
-                      </button>
-                    </td>
+                    <button
+                      key={val}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => !disabled && onScore(key, val)}
+                      className={`
+                        w-10 h-10 rounded-full border-2 transition-all duration-150 flex items-center justify-center text-xs font-bold
+                        focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-400
+                        ${disabled ? "cursor-default text-zinc-400" : "cursor-pointer hover:border-blue-400 hover:bg-blue-50"}
+                        ${
+                          isSelected
+                            ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-200"
+                            : "border-zinc-300 bg-white text-zinc-700"
+                        }
+                      `}
+                      aria-label={`Nilai ${val} untuk pertanyaan: ${item.teks}`}
+                    >
+                      {val}
+                    </button>
                   );
                 })}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -269,7 +320,7 @@ export default function ParentEvaluation() {
       <Layout role="parent">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-zinc-900">
-            Evaluasi Sekolah dan Guru
+            Evaluasi Sekolah dan Wali Kelas
           </h1>
         </div>
         <Card className="max-w-lg mx-auto text-center py-14">
@@ -299,7 +350,7 @@ export default function ParentEvaluation() {
       <Layout role="parent">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-zinc-900">
-            Evaluasi Sekolah dan Guru
+            Evaluasi Sekolah dan Wali Kelas
           </h1>
         </div>
         <Card className="max-w-lg mx-auto text-center py-14">
@@ -311,7 +362,7 @@ export default function ParentEvaluation() {
           </h2>
           <p className="text-zinc-500 text-sm leading-relaxed">
             Terima kasih! Masukan Anda sangat berarti bagi pengembangan sekolah
-            dan para guru kami.
+            dan wali kelas kami.
           </p>
           {periode && (
             <p className="mt-4 text-xs text-zinc-400">
@@ -329,7 +380,7 @@ export default function ParentEvaluation() {
       <Layout role="parent">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-zinc-900">
-            Evaluasi Sekolah dan Guru
+            Evaluasi Sekolah dan Wali Kelas
           </h1>
         </div>
         <Card className="max-w-lg mx-auto text-center py-14">
@@ -352,7 +403,7 @@ export default function ParentEvaluation() {
     <Layout role="parent">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-zinc-900">
-          Evaluasi Sekolah dan Guru
+          Evaluasi Sekolah dan Wali Kelas
         </h1>
         {periode && (
           <p className="text-zinc-500 text-sm mt-1">
@@ -406,10 +457,10 @@ export default function ParentEvaluation() {
               <Card key={guru.id} className="p-0 overflow-hidden">
                 <div className="px-6 py-4 border-b border-zinc-200 bg-zinc-50">
                   <h2 className="text-base font-bold text-zinc-900">
-                    Evaluasi Guru — {guru.nama}
+                    Evaluasi Wali Kelas — {guru.nama}
                   </h2>
                   <p className="text-xs text-zinc-500 mt-0.5">
-                    {guru.mataPelajaran.replace(/_/g, " ")}
+                    Wali Kelas
                   </p>
                 </div>
                 <div className="p-6">

@@ -19,9 +19,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const todayStart = new Date(`${localTodayStr}T00:00:00.000Z`);
     const todayEnd = new Date(`${localTodayStr}T23:59:59.999Z`);
 
+    // Cari tahun ajaran aktif untuk filter dashboard
+    const tahunAktifDashboard = await prisma.tahunAjaran.findFirst({
+      where: { isActive: true },
+    });
+
     const [totalGuru, totalSiswa, totalKelas, totalSesiHariIni] = await Promise.all([
-      prisma.guru.count({ where: { status: "AKTIF" } }),
-      prisma.siswa.count({ where: { status: "AKTIF" } }),
+      // Hitung guru unik yang mengajar di tahun ajaran aktif
+      tahunAktifDashboard
+        ? prisma.guruTahun.findMany({
+            where: { tahunAjaranId: tahunAktifDashboard.id },
+            select: { guruId: true },
+            distinct: ["guruId"],
+          }).then((rows) => rows.length)
+        : prisma.guru.count({ where: { status: "AKTIF" } }),
+      // Hitung siswa unik yang terdaftar di tahun ajaran aktif
+      tahunAktifDashboard
+        ? prisma.siswaKelas.findMany({
+            where: { tahunAjaranId: tahunAktifDashboard.id },
+            select: { siswaId: true },
+            distinct: ["siswaId"],
+          }).then((rows) => rows.length)
+        : prisma.siswa.count({ where: { status: "AKTIF" } }),
+      // Total kelas tetap global (kelas tidak terikat tahun ajaran)
       prisma.kelas.count(),
       prisma.sesiAbsensi.count({
         where: {

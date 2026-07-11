@@ -181,36 +181,23 @@ export default function PrincipalReports() {
 
       {/* Filter Tahun Ajaran */}
       <Card className="mb-6 p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-wrap">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <span className="text-sm font-semibold text-zinc-700 shrink-0">Filter Periode:</span>
-          <div className="flex gap-2 flex-wrap">
-            {tahunList.length === 0 ? (
-              <span className="text-sm text-zinc-400 py-1">Memuat...</span>
-            ) : (
-              tahunList.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedTahunId(t.id)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                    selectedTahunId === t.id
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-                  }`}
-                >
-                  {t.nama}
-                  {t.status === "Aktif" && (
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                      selectedTahunId === t.id
-                        ? "bg-white/20 text-white"
-                        : "bg-emerald-100 text-emerald-700"
-                    }`}>
-                      Aktif
-                    </span>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
+          {tahunList.length === 0 ? (
+            <span className="text-sm text-zinc-400 py-1">Memuat...</span>
+          ) : (
+            <select
+              value={selectedTahunId ?? ""}
+              onChange={(e) => setSelectedTahunId(Number(e.target.value))}
+              className="border border-zinc-200 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer w-full sm:w-auto sm:min-w-[280px]"
+            >
+              {tahunList.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nama}{t.status === "Aktif" ? " (Aktif)" : ""}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       </Card>
 

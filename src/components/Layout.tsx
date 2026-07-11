@@ -203,13 +203,16 @@ function SidebarContent({
       </div>
 
       <div className="p-4 border-t border-zinc-200 shrink-0">
-        <Link
-          href="/"
+        <button
+          onClick={async () => {
+            await fetch("/api/auth/logout", { method: "POST" });
+            window.location.href = "/";
+          }}
           className="flex items-center gap-3 w-full px-3 py-2 text-sm font-medium text-red-500 rounded-lg hover:bg-red-50 transition-colors"
         >
           <LogOut size={18} />
           Keluar
-        </Link>
+        </button>
       </div>
     </>
   );

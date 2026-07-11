@@ -284,6 +284,7 @@ export default function ParentAttendance() {
                     {todayAttendance.length} catatan
                   </span>
                 </div>
+                <div className="max-h-[400px] overflow-y-auto">
                 <TableWrapper>
                   <Thead>
                     <Tr>
@@ -309,7 +310,7 @@ export default function ParentAttendance() {
                             <div className="text-xs text-zinc-400">{row.day}</div>
                           </Td>
                           <Td className="text-zinc-700 font-medium text-xs sm:text-sm">
-                            {row.mapel ? row.mapel.replace(/_/g, " ") : "—"}
+                            {row.mapel === "MATA_PELAJARAN_WAJIB" ? "Wali Kelas" : (row.mapel ? row.mapel.replace(/_/g, " ") : "—")}
                           </Td>
                           <Td>
                             <span
@@ -324,6 +325,7 @@ export default function ParentAttendance() {
                     )}
                   </Tbody>
                 </TableWrapper>
+                </div>
               </Card>
             </div>
 

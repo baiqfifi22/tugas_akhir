@@ -284,7 +284,7 @@ export default function AdminStudents() {
   // Cek apakah Spanduk Saran Pintar (Smart Suggestion) harus dimuat
   const activeYearObj = tahunList.find(t => t.status === "Aktif");
   const isSelectedActiveYear = activeYearObj && String(selectedTahunId) === String(activeYearObj.id);
-  const showSuggestionBanner = filtered.length === 0 && kelasFilter !== "all" && isSelectedActiveYear && !kelasFilter.startsWith("1");
+  const showSuggestionBanner = filtered.length === 0 && kelasFilter !== "all" && isSelectedActiveYear && !kelasFilter.startsWith("1") && statusFilter !== "NONAKTIF";
 
   const openAdd = () => {
     setEditTarget(null);
@@ -535,9 +535,9 @@ export default function AdminStudents() {
         />
       )}
 
-      {/* Modal: Wizard Naik Kelas Massal */}
+      {/* Modal: Atur Kenaikan Kelas Massal */}
       {showWizard && (
-        <Modal title="Wizard Kenaikan & Penempatan Kelas" onClose={() => setShowWizard(false)}>
+        <Modal title="Atur Kenaikan & Penempatan Kelas" onClose={() => setShowWizard(false)}>
           <form onSubmit={handleWizardSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -693,9 +693,9 @@ export default function AdminStudents() {
           <button onClick={() => printPDF(filtered, activeTahunAjaran)} className="flex items-center gap-2 px-3 py-2 text-sm border border-zinc-200 rounded-lg text-zinc-600 hover:bg-zinc-50 transition-colors font-semibold">
             <Printer size={16} /> Print PDF
           </button>
-          {(kelasFilter === "all" ? students.length === 0 : filtered.length === 0) && (
+          {(kelasFilter === "all" ? students.length === 0 : filtered.length === 0) && statusFilter !== "NONAKTIF" && (
             <Button variant="outline" onClick={() => openNaikKelasWizard(kelasFilter !== "all" ? kelasFilter : "")}>
-              <ArrowUpCircle size={16} /> Kenaikan Kelas (Wizard)
+              <ArrowUpCircle size={16} /> Atur Kenaikan Kelas
             </Button>
           )}
           <Button variant="primary" onClick={openAdd}><Plus size={18} /> Tambah Siswa</Button>
@@ -762,25 +762,35 @@ export default function AdminStudents() {
                       <div className="w-12 h-12 rounded-full bg-zinc-50 flex items-center justify-center text-zinc-400 mb-3 border border-zinc-100 animate-pulse">
                         <GraduationCap size={22} className="text-blue-500" />
                       </div>
-                      {kelasFilter !== "all" ? (
+                      {statusFilter === "NONAKTIF" ? (
+                        <>
+                          <h3 className="text-sm font-bold text-zinc-950">Tidak Ada Siswa Nonaktif</h3>
+                          <p className="text-xs text-zinc-500 mt-1 leading-relaxed max-w-sm">
+                            {kelasFilter !== "all"
+                              ? <>Tidak ada siswa nonaktif di kelas <strong>{kelasFilter}</strong> untuk Tahun Ajaran <strong>{activeTahunAjaran}</strong>.</>  
+                              : <>Tidak ada siswa dengan status nonaktif untuk Tahun Ajaran <strong>{activeTahunAjaran}</strong>.</>
+                            }
+                          </p>
+                        </>
+                      ) : kelasFilter !== "all" ? (
                         <>
                           <h3 className="text-sm font-bold text-zinc-950">Kelas {kelasFilter} Kosong</h3>
                           <p className="text-xs text-zinc-500 mt-1 mb-4 leading-relaxed max-w-sm">
-                            Belum ada siswa yang ditempatkan di kelas <strong>{kelasFilter}</strong> untuk Tahun Ajaran <strong>{activeTahunAjaran}</strong>. Silakan gunakan Wizard untuk penempatan kelas.
+                            Belum ada siswa yang ditempatkan di kelas <strong>{kelasFilter}</strong> untuk Tahun Ajaran <strong>{activeTahunAjaran}</strong>.
                           </p>
                           <button
                             type="button"
                             onClick={() => openNaikKelasWizard(kelasFilter)}
                             className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow cursor-pointer border-none"
                           >
-                            <ArrowUpCircle size={15} /> Atur Kenaikan Kelas (Wizard)
+                            <ArrowUpCircle size={15} /> Atur Kenaikan Kelas
                           </button>
                         </>
                       ) : (
                         <>
                           <h3 className="text-sm font-bold text-zinc-950">Belum Ada Siswa</h3>
                           <p className="text-xs text-zinc-500 mt-1 mb-4 leading-relaxed max-w-sm">
-                            Tahun Ajaran <strong>{activeTahunAjaran}</strong> belum memiliki siswa terdaftar sama sekali. Silakan gunakan Wizard untuk menyalin dari Tahun Ajaran sebelumnya atau tambah siswa secara manual.
+                            Tahun Ajaran <strong>{activeTahunAjaran}</strong> belum memiliki siswa terdaftar. Atur kenaikan kelas dari tahun ajaran sebelumnya atau tambah siswa secara manual.
                           </p>
                           <div className="flex gap-2 justify-center">
                             <button
@@ -788,7 +798,7 @@ export default function AdminStudents() {
                               onClick={() => openNaikKelasWizard("")}
                               className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-all border border-zinc-200 cursor-pointer"
                             >
-                              <ArrowUpCircle size={14} /> Wizard Kenaikan
+                              <ArrowUpCircle size={14} /> Atur Kenaikan Kelas
                             </button>
                             <button
                               type="button"

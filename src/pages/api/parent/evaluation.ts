@@ -83,7 +83,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (siswaKelas) {
         const guruTahunList = await prisma.guruTahun.findMany({
-          where: { kelasId: siswaKelas.kelasId, tahunAjaranId: tahunAktif.id },
+          where: {
+            kelasId: siswaKelas.kelasId,
+            tahunAjaranId: tahunAktif.id,
+            mataPelajaran: "MATA_PELAJARAN_WAJIB",
+          },
           include: { guru: true },
         });
         guruList = guruTahunList.map((gt) => ({

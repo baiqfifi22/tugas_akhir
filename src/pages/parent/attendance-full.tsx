@@ -211,7 +211,7 @@ export default function ParentAttendanceFull() {
                         <div className="text-xs text-zinc-400">{row.day}</div>
                       </Td>
                       <Td className="text-zinc-700 font-medium text-xs sm:text-sm">
-                        {row.mapel ? row.mapel.replace(/_/g, " ") : "—"}
+                        {row.mapel === "MATA_PELAJARAN_WAJIB" ? "Wali Kelas" : (row.mapel ? row.mapel.replace(/_/g, " ") : "—")}
                       </Td>
                       <Td>
                         <span

@@ -50,7 +50,7 @@ const MAPEL_OPTIONS = [
   { value: "B_ARAB", label: "B. Arab" },
   { value: "BAHASA_INGGRIS", label: "Bahasa Inggris" },
   { value: "PJOK", label: "PJOK" },
-  { value: "MATA_PELAJARAN_WAJIB", label: "Mata Pelajaran Wajib" },
+  { value: "MATA_PELAJARAN_WAJIB", label: "Wali Kelas" },
 ];
 function mapelLabel(val: string) {
   return MAPEL_OPTIONS.find((m) => m.value === val)?.label ?? val.replace(/_/g, " ");

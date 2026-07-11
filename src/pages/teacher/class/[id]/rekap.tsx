@@ -373,7 +373,7 @@ export default function ClassRekap() {
               {/* Tabel Detail Per Siswa (Mingguan) */}
               <h2 className="text-lg font-bold text-zinc-900 mb-4 flex items-center gap-2">
                 <Calendar size={18} className="text-blue-600" />
-                Detail Kehadiran Siswa (Ketuk nama siswa untuk detail 1 tahun)
+                Detail Kehadiran Siswa
               </h2>
               <Card className="p-0 overflow-hidden mb-4">
                 <TableWrapper>
@@ -386,7 +386,6 @@ export default function ClassRekap() {
                           {DAY_LABELS[d]}
                         </Th>
                       ))}
-                      <Th className="text-center">H</Th>
                       <Th className="text-center">%</Th>
                     </Tr>
                   </Thead>
@@ -427,9 +426,6 @@ export default function ClassRekap() {
                                 </span>
                               </Td>
                             ))}
-                            <Td className="text-center font-bold text-emerald-600">
-                              {hadirCount}
-                            </Td>
                             <Td className="text-center">
                               {pctHadir !== null ? (
                                 <span
