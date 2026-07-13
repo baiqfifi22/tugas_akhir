@@ -57,10 +57,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
 
       if (sudahSubmit) {
+        // Juga kembalikan guruList & aspek supaya UI bisa tampilkan form disabled
+        const siswaId = orangTua.siswaId;
+        const siswaKelasDisabled = await prisma.siswaKelas.findFirst({
+          where: { siswaId, tahunAjaranId: tahunAktif.id },
+        });
+        let guruListDisabled: { id: number; nama: string; mataPelajaran: string }[] = [];
+        if (siswaKelasDisabled) {
+          const gtList = await prisma.guruTahun.findMany({
+            where: { kelasId: siswaKelasDisabled.kelasId, tahunAjaranId: tahunAktif.id, mataPelajaran: "MATA_PELAJARAN_WAJIB" },
+            include: { guru: true },
+            distinct: ["guruId"],
+          });
+          guruListDisabled = gtList.map((gt) => ({ id: gt.guru.id, nama: gt.guru.nama, mataPelajaran: gt.mataPelajaran }));
+        }
+        const activeAspekDisabled = await prisma.aspekEvaluasi.findMany({ where: { aktif: true }, orderBy: { id: "asc" } });
         return res.status(200).json({
           success: true,
           status: "SUDAH_SUBMIT",
           periode: { id: periode.id, mulai: periode.mulai.toISOString(), selesai: periode.selesai.toISOString() },
+          guruList: guruListDisabled,
+          aspekSekolah: activeAspekDisabled.filter((a) => a.tipe === "SEKOLAH").map((a) => ({ id: a.id, teks: a.teks })),
+          aspekGuru: activeAspekDisabled.filter((a) => a.tipe === "GURU").map((a) => ({ id: a.id, teks: a.teks })),
         });
       }
 
@@ -89,6 +107,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             mataPelajaran: "MATA_PELAJARAN_WAJIB",
           },
           include: { guru: true },
+          distinct: ["guruId"],
         });
         guruList = guruTahunList.map((gt) => ({
           id: gt.guru.id,
@@ -123,7 +142,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // ── POST: Submit evaluasi ─────────────────────────────────────────────
     if (req.method === "POST") {
-      const { periodeId, evaluasiSekolah, evaluasiGuru } = req.body;
+      const { periodeId, evaluasiSekolah, evaluasiGuru, saranSekolah, kritikGuru } = req.body;
 
       if (!periodeId) return res.status(400).json({ message: "periodeId harus disertakan" });
 
@@ -151,23 +170,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const tanggal = new Date();
 
-      // Simpan evaluasi sekolah — pakai aspekId (FK) bukan teks
+      // Simpan evaluasi sekolah — kritik diisi dari saranSekolah (kesan & pesan)
       const evalSekolahData = evaluasiSekolah.map(
-        (e: { aspekId: number; skor: number; kritik?: string }) => ({
+        (e: { aspekId: number; skor: number }) => ({
           periodeId: Number(periodeId),
           tipe: "SEKOLAH",
           guruId: null,
           aspekId: Number(e.aspekId),
           skor: Number(e.skor),
-          kritik: e.kritik || null,
+          kritik: saranSekolah || null,
           tanggal,
         })
       );
 
-      // Simpan evaluasi guru — pakai aspekId (FK) bukan teks
+      // Simpan evaluasi guru — kritik diisi dari kritikGuru[guruId] (kritik per guru)
       const evalGuruData: any[] = [];
       if (Array.isArray(evaluasiGuru)) {
         for (const eg of evaluasiGuru) {
+          const kritikText = kritikGuru?.[String(eg.guruId)] || null;
           for (const aspekItem of eg.aspekList || []) {
             evalGuruData.push({
               periodeId: Number(periodeId),
@@ -175,7 +195,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               guruId: Number(eg.guruId),
               aspekId: Number(aspekItem.aspekId),
               skor: Number(aspekItem.skor),
-              kritik: aspekItem.kritik || null,
+              kritik: kritikText,
               tanggal,
             });
           }

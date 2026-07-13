@@ -289,11 +289,11 @@ export default function PrincipalReports() {
               <div className="space-y-4">
                 {data.aspekDikeluhkan.map((a) => (
                   <div key={a.aspek}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-sm text-zinc-700 font-medium truncate max-w-xs" title={a.aspek}>
+                    <div className="flex items-start justify-between mb-1.5 gap-3">
+                      <span className="text-sm text-zinc-700 font-medium leading-snug">
                         {a.aspek}
                       </span>
-                      <span className="text-sm font-bold text-rose-500 shrink-0 ml-2">
+                      <span className="text-sm font-bold text-rose-500 shrink-0">
                         {a.keluhan} poin
                       </span>
                     </div>
