@@ -16,6 +16,8 @@ import {
   CalendarDays,
   Menu,
   X,
+  MessageSquare,
+  Bell,
 } from "lucide-react";
 
 export type NavItem = { label: string; href: string; icon: LucideIcon };
@@ -80,6 +82,11 @@ const ROLE_CONFIG = {
         href: `/teacher/class/${classId}/connector`,
         icon: BookOpen,
       },
+      {
+        label: "Laporan Personal",
+        href: `/teacher/laporan-personal`,
+        icon: MessageSquare,
+      },
     ],
   },
   principal: {
@@ -130,6 +137,11 @@ const ROLE_CONFIG = {
         label: "Evaluasi",
         href: "/parent/evaluation",
         icon: BarChart2,
+      },
+      {
+        label: "Laporan Personal",
+        href: "/parent/laporan-personal",
+        icon: MessageSquare,
       },
     ],
   },
@@ -236,6 +248,7 @@ export function Layout({
   const [dynamicParent, setDynamicParent] = React.useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [dynamicPrincipal, setDynamicPrincipal] = React.useState<any>(null);
+  const [unreadLaporan, setUnreadLaporan] = React.useState<number>(0);
 
   // State form ganti password
   const [showPwForm, setShowPwForm] = React.useState(false);
@@ -300,6 +313,9 @@ export function Layout({
             const data = await res.json();
             if (data.success && data.teacher && isMounted) {
               setDynamicTeacher(data.teacher);
+              if (typeof data.unreadLaporan === "number") {
+                setUnreadLaporan(data.unreadLaporan);
+              }
             }
           }
         } catch (error) {
@@ -514,6 +530,21 @@ export function Layout({
 
           {/* User profile */}
           <div className="flex items-center gap-3">
+            {/* Badge Notifikasi Laporan Personal — hanya untuk guru */}
+            {role === "teacher" && (
+              <button
+                onClick={() => router.push("/teacher/laporan-personal")}
+                className="relative p-2 rounded-lg text-zinc-500 hover:text-orange-600 hover:bg-orange-50 transition-colors"
+                aria-label={`Laporan personal masuk${unreadLaporan > 0 ? `: ${unreadLaporan} belum dikonfirmasi` : ""}`}
+              >
+                <Bell size={20} />
+                {unreadLaporan > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 shadow-sm animate-pulse">
+                    {unreadLaporan > 99 ? "99+" : unreadLaporan}
+                  </span>
+                )}
+              </button>
+            )}
             <div className="relative" ref={profileRef}>
               {/* Avatar / trigger klik */}
               <button

@@ -31,6 +31,15 @@ export default async function handler(
       return res.status(404).json({ message: "Tidak ada Tahun Ajaran aktif" });
     }
 
+    // Cek apakah tanggal di luar rentang tahun ajaran
+    const tanggalDate = new Date(tanggal);
+    const tahunMulai = new Date(tahunAjaran.mulai);
+    const tahunSelesai = new Date(tahunAjaran.selesai);
+    const isOutOfRange = tanggalDate < tahunMulai || tanggalDate > tahunSelesai;
+    const outOfRangeWarning = isOutOfRange
+      ? `Perhatian: Tanggal ${tanggalDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} berada di luar rentang tahun ajaran aktif (${tahunMulai.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} – ${tahunSelesai.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}). Pastikan pengaturan tahun ajaran sudah benar.`
+      : null;
+
     // Cari mata pelajaran dari GuruTahun berdasarkan kelasId dan guruId
     const guruTahun = await prisma.guruTahun.findFirst({
       where: {
@@ -63,7 +72,8 @@ export default async function handler(
     return res.status(200).json({
       success: true,
       message: "Absensi berhasil disimpan",
-      sesiId: sesi.id
+      sesiId: sesi.id,
+      warning: outOfRangeWarning,
     });
 
   } catch (error) {

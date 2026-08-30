@@ -107,9 +107,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     // ── Status Absensi Hari Ini ───────────────────────────────────────────────
-    const today = new Date();
-    const todayStart = new Date(today); todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today); todayEnd.setHours(23, 59, 59, 999);
+    // Gunakan UTC+8 agar "hari ini" konsisten dengan waktu lokal pengguna Indonesia.
+    const WIB_OFFSET_MS = 8 * 60 * 60 * 1000;
+    const nowTs = new Date();
+    const localNowTs = new Date(nowTs.getTime() + WIB_OFFSET_MS);
+    const todayYr  = localNowTs.getUTCFullYear();
+    const todayMo  = String(localNowTs.getUTCMonth() + 1).padStart(2, "0");
+    const todayDy  = String(localNowTs.getUTCDate()).padStart(2, "0");
+    const todayStr = `${todayYr}-${todayMo}-${todayDy}`;
+    const todayStart = new Date(`${todayStr}T00:00:00.000Z`);
+    const todayEnd   = new Date(`${todayStr}T23:59:59.999Z`);
 
     const sesiHariIni = await prisma.sesiAbsensi.findMany({
       where: { tanggal: { gte: todayStart, lte: todayEnd } },

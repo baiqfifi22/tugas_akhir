@@ -66,6 +66,12 @@ export default async function handler(
         studentId: String(l.siswaId),
         studentName: l.siswa.nama,
         notes: l.uraian,
+        isStructured: !!(l.perilaku || l.akademik || l.kedisiplinan),
+        perilaku: l.perilaku,
+        akademik: l.akademik,
+        kedisiplinan: l.kedisiplinan,
+        catatanKhusus: l.catatanKhusus,
+        rekomendasi: l.rekomendasi,
         createdAt: l.tanggal.toLocaleDateString("id-ID", {
           day: "numeric",
           month: "short",
@@ -87,17 +93,37 @@ export default async function handler(
   // ─── POST ──────────────────────────────────────────────────────────────────
   } else if (req.method === "POST") {
     try {
-      const { studentId, notes } = req.body;
+      const { studentId, perilaku, akademik, kedisiplinan, catatanKhusus, rekomendasi } = req.body;
 
-      if (!studentId || !notes) {
-        return res.status(400).json({ message: "Data tidak lengkap" });
+      if (!studentId) {
+        return res.status(400).json({ message: "studentId diperlukan" });
       }
+
+      // Minimal satu field harus diisi
+      const hasContent = !!(perilaku?.trim() || akademik?.trim() || kedisiplinan?.trim() || catatanKhusus?.trim() || rekomendasi?.trim());
+      if (!hasContent) {
+        return res.status(400).json({ message: "Minimal satu field laporan harus diisi" });
+      }
+
+      // Buat ringkasan uraian untuk backward compatibility
+      const uraianParts: string[] = [];
+      if (perilaku?.trim()) uraianParts.push(`Perilaku: ${perilaku.trim()}`);
+      if (akademik?.trim()) uraianParts.push(`Akademik: ${akademik.trim()}`);
+      if (kedisiplinan?.trim()) uraianParts.push(`Kedisiplinan: ${kedisiplinan.trim()}`);
+      if (catatanKhusus?.trim()) uraianParts.push(`Catatan: ${catatanKhusus.trim()}`);
+      if (rekomendasi?.trim()) uraianParts.push(`Rekomendasi: ${rekomendasi.trim()}`);
+      const uraianSummary = uraianParts.join(" | ");
 
       const newReport = await prisma.laporan.create({
         data: {
           guruId: guruId,
           siswaId: parseInt(studentId, 10),
-          uraian: notes,
+          uraian: uraianSummary,
+          perilaku: perilaku?.trim() || null,
+          akademik: akademik?.trim() || null,
+          kedisiplinan: kedisiplinan?.trim() || null,
+          catatanKhusus: catatanKhusus?.trim() || null,
+          rekomendasi: rekomendasi?.trim() || null,
           tanggal: new Date(),
         },
         include: { siswa: true },
@@ -110,6 +136,12 @@ export default async function handler(
           studentId: String(newReport.siswaId),
           studentName: newReport.siswa.nama,
           notes: newReport.uraian,
+          isStructured: true,
+          perilaku: newReport.perilaku,
+          akademik: newReport.akademik,
+          kedisiplinan: newReport.kedisiplinan,
+          catatanKhusus: newReport.catatanKhusus,
+          rekomendasi: newReport.rekomendasi,
           createdAt: newReport.tanggal.toLocaleDateString("id-ID", {
             day: "numeric",
             month: "short",

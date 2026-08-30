@@ -20,7 +20,7 @@ import {
 import toast, { Toaster } from "react-hot-toast";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  const auth = requireRole(context, ["GURU", "KEPALA_SEKOLAH"]);
+  const auth = requireRole(context, ["GURU"]);
   if ("redirect" in auth) return auth;
   return { props: {} };
 };
@@ -87,6 +87,7 @@ export default function ClassAttendance() {
   const [activeIzins, setActiveIzins] = useState<any[]>([]);
   const [selectedIzin, setSelectedIzin] = useState<any | null>(null);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
+  const [submitWarning, setSubmitWarning] = useState<string | null>(null);
 
   // Load daftar siswa
   const fetchStudents = useCallback(async (kelasId: string) => {
@@ -226,6 +227,8 @@ export default function ClassAttendance() {
         setSaveState("submitted");
         setMode("edit");
         setExistingSesiId(data.sesiId);
+        // Tampilkan warning jika tanggal di luar tahun ajaran
+        setSubmitWarning(data.warning || null);
         // Refresh summary
         const summary = {
           hadir: students.filter((s) => s.status === "Hadir").length,
@@ -326,11 +329,16 @@ export default function ClassAttendance() {
               variant={isMarkingAll ? "primary" : "outline"}
               onClick={markAllHadir}
               disabled={isMarkingAll}
-              className={isMarkingAll ? "bg-emerald-600 hover:bg-emerald-600 text-white border-emerald-600 transition-all duration-300" : "transition-all duration-300"}
+              className={
+                isMarkingAll
+                  ? "bg-emerald-600 hover:bg-emerald-600 text-white border-emerald-600 transition-all duration-300"
+                  : "transition-all duration-300"
+              }
             >
               {isMarkingAll ? (
                 <span className="flex items-center gap-1.5">
-                  <CheckCircle2 size={16} className="animate-bounce" /> Semua Hadir!
+                  <CheckCircle2 size={16} className="animate-bounce" /> Semua
+                  Hadir!
                 </span>
               ) : (
                 "Mark All Hadir"
@@ -379,6 +387,24 @@ export default function ClassAttendance() {
         </div>
       </div>
 
+      {/* Warning: Tanggal di Luar Rentang Tahun Ajaran */}
+      {submitWarning && (
+        <div className="mb-4 flex items-start gap-3 px-4 py-3 rounded-xl border border-yellow-300 bg-yellow-50 text-yellow-800 text-sm shadow-sm">
+          <AlertCircle size={18} className="shrink-0 mt-0.5 text-yellow-600" />
+          <div>
+            <p className="font-bold">Perhatian</p>
+            <p className="mt-0.5 font-normal">{submitWarning}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSubmitWarning(null)}
+            className="ml-auto shrink-0 text-yellow-600 hover:text-yellow-800 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Banner: Sudah Absen Hari Ini */}
       {mode === "edit" && date === getLocalDateString() && (
         <div className="mb-6 p-6 rounded-xl border border-emerald-200 bg-emerald-50/80 shadow-sm">
@@ -401,10 +427,26 @@ export default function ClassAttendance() {
             {existingSummary && (
               <div className="flex gap-4 text-center justify-start sm:justify-end">
                 {[
-                  { label: "Hadir", val: existingSummary.hadir, color: "text-emerald-700" },
-                  { label: "Sakit", val: existingSummary.sakit, color: "text-yellow-700" },
-                  { label: "Izin", val: existingSummary.izin, color: "text-blue-700" },
-                  { label: "Alpa", val: existingSummary.alpa, color: "text-red-700" },
+                  {
+                    label: "Hadir",
+                    val: existingSummary.hadir,
+                    color: "text-emerald-700",
+                  },
+                  {
+                    label: "Sakit",
+                    val: existingSummary.sakit,
+                    color: "text-yellow-700",
+                  },
+                  {
+                    label: "Izin",
+                    val: existingSummary.izin,
+                    color: "text-blue-700",
+                  },
+                  {
+                    label: "Alpa",
+                    val: existingSummary.alpa,
+                    color: "text-red-700",
+                  },
                 ].map(({ label, val, color }) => (
                   <div key={label}>
                     <p className={`text-xl font-bold ${color}`}>{val}</p>
@@ -450,7 +492,10 @@ export default function ClassAttendance() {
         <div className="mb-6 p-6 rounded-xl border border-orange-200 bg-orange-50/90 text-orange-955 shadow-sm">
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
-              <AlertCircle size={20} className="text-orange-600 flex-shrink-0" />
+              <AlertCircle
+                size={20}
+                className="text-orange-600 flex-shrink-0"
+              />
               <div>
                 <p className="font-bold text-orange-900">
                   Pemberitahuan Izin/Sakit Hari Ini
@@ -471,7 +516,9 @@ export default function ClassAttendance() {
                   >
                     {i.siswaNama}
                   </button>{" "}
-                  <span className="text-orange-600 font-semibold text-xs">({i.tipe === "SAKIT" ? "Sakit" : "Izin"})</span>
+                  <span className="text-orange-600 font-semibold text-xs">
+                    ({i.tipe === "SAKIT" ? "Sakit" : "Izin"})
+                  </span>
                 </div>
               ))}
             </div>
@@ -592,7 +639,10 @@ export default function ClassAttendance() {
                 <Tbody>
                   {students.length === 0 && (
                     <Tr>
-                      <Td colSpan={3} className="text-center text-zinc-400 py-8">
+                      <Td
+                        colSpan={3}
+                        className="text-center text-zinc-400 py-8"
+                      >
                         {checkingStatus
                           ? "Memuat data..."
                           : "Tidak ada data siswa"}
@@ -605,13 +655,15 @@ export default function ClassAttendance() {
                     );
                     return (
                       <Tr key={student.id}>
-                        <Td className="text-zinc-400 text-sm w-10">{idx + 1}</Td>
+                        <Td className="text-zinc-400 text-sm w-10">
+                          {idx + 1}
+                        </Td>
                         <Td className="font-medium text-zinc-900">
                           <div className="flex flex-col">
                             <span>{student.name}</span>
                             {hasIzin && (
                               <span className="text-xs text-blue-600 font-semibold mt-0.5">
-                                Keterangan Tidak Hadir: {hasIzin.tipe} 
+                                Keterangan Tidak Hadir: {hasIzin.tipe}
                               </span>
                             )}
                           </div>
@@ -658,9 +710,7 @@ export default function ClassAttendance() {
             <div className="block md:hidden divide-y divide-zinc-100">
               {students.length === 0 && (
                 <div className="text-center text-zinc-400 py-12 bg-white rounded-xl border border-zinc-150">
-                  {checkingStatus
-                    ? "Memuat data..."
-                    : "Tidak ada data siswa"}
+                  {checkingStatus ? "Memuat data..." : "Tidak ada data siswa"}
                 </div>
               )}
               {students.map((student, idx) => {
@@ -668,12 +718,19 @@ export default function ClassAttendance() {
                   (i: any) => i.siswaId === student.id,
                 );
                 return (
-                  <div key={student.id} className="p-4 bg-white hover:bg-zinc-50 transition-colors border-b border-zinc-100 last:border-b-0">
+                  <div
+                    key={student.id}
+                    className="p-4 bg-white hover:bg-zinc-50 transition-colors border-b border-zinc-100 last:border-b-0"
+                  >
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-zinc-400 w-5 text-right">{idx + 1}.</span>
+                        <span className="text-xs font-semibold text-zinc-400 w-5 text-right">
+                          {idx + 1}.
+                        </span>
                         <div className="flex flex-col">
-                          <span className="font-bold text-zinc-900 text-sm">{student.name}</span>
+                          <span className="font-bold text-zinc-900 text-sm">
+                            {student.name}
+                          </span>
                           {hasIzin && (
                             <span className="text-xs text-blue-600 font-semibold mt-0.5">
                               Keterangan Tidak Hadir: {hasIzin.tipe}
@@ -688,12 +745,21 @@ export default function ClassAttendance() {
                         const isSelected = student.status === st;
                         let activeBgBorderText = "";
                         if (isSelected) {
-                          if (st === "Hadir") activeBgBorderText = "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold";
-                          else if (st === "Izin") activeBgBorderText = "bg-blue-50 border-blue-500 text-blue-700 font-bold";
-                          else if (st === "Sakit") activeBgBorderText = "bg-yellow-50 border-yellow-500 text-yellow-700 font-bold";
-                          else if (st === "Alpa") activeBgBorderText = "bg-red-50 border-red-500 text-red-700 font-bold";
+                          if (st === "Hadir")
+                            activeBgBorderText =
+                              "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold";
+                          else if (st === "Izin")
+                            activeBgBorderText =
+                              "bg-blue-50 border-blue-500 text-blue-700 font-bold";
+                          else if (st === "Sakit")
+                            activeBgBorderText =
+                              "bg-yellow-50 border-yellow-500 text-yellow-700 font-bold";
+                          else if (st === "Alpa")
+                            activeBgBorderText =
+                              "bg-red-50 border-red-500 text-red-700 font-bold";
                         } else {
-                          activeBgBorderText = "bg-transparent border-zinc-200 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700";
+                          activeBgBorderText =
+                            "bg-transparent border-zinc-200 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700";
                         }
 
                         return (
@@ -719,15 +785,26 @@ export default function ClassAttendance() {
       {/* Modal Detail Izin Kehadiran */}
       {selectedIzin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedIzin(null)} />
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setSelectedIzin(null)}
+          />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md z-10 overflow-hidden font-sans border border-zinc-150">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 bg-orange-50/50">
               <div>
-                <h3 className="font-bold text-zinc-900 text-sm">Detail Izin Kehadiran</h3>
-                <p className="text-[11px] text-orange-700 font-semibold mt-0.5">Pengajuan dari Orang Tua</p>
+                <h3 className="font-bold text-zinc-900 text-sm">
+                  Detail Izin Kehadiran
+                </h3>
+                <p className="text-[11px] text-orange-700 font-semibold mt-0.5">
+                  Pengajuan dari Orang Tua
+                </p>
               </div>
-              <button type="button" onClick={() => setSelectedIzin(null)} className="text-zinc-400 hover:text-zinc-650 transition-colors p-1 rounded-lg hover:bg-zinc-100 cursor-pointer">
+              <button
+                type="button"
+                onClick={() => setSelectedIzin(null)}
+                className="text-zinc-400 hover:text-zinc-650 transition-colors p-1 rounded-lg hover:bg-zinc-100 cursor-pointer"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -735,29 +812,43 @@ export default function ClassAttendance() {
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Nama Siswa</p>
-                  <p className="text-sm font-bold text-zinc-900 mt-0.5">{selectedIzin.siswaNama}</p>
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">
+                    Nama Siswa
+                  </p>
+                  <p className="text-sm font-bold text-zinc-900 mt-0.5">
+                    {selectedIzin.siswaNama}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Tipe Izin</p>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold mt-1 ${selectedIzin.tipe === "SAKIT" ? "bg-yellow-50 text-yellow-700 border border-yellow-250 font-semibold" : "bg-blue-50 text-blue-700 border border-blue-250 font-semibold"}`}>
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">
+                    Tipe Izin
+                  </p>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold mt-1 ${selectedIzin.tipe === "SAKIT" ? "bg-yellow-50 text-yellow-700 border border-yellow-250 font-semibold" : "bg-blue-50 text-blue-700 border border-blue-250 font-semibold"}`}
+                  >
                     {selectedIzin.tipe}
                   </span>
                 </div>
               </div>
 
               <div>
-                <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Durasi Izin</p>
+                <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">
+                  Durasi Izin
+                </p>
                 <p className="text-xs font-bold text-zinc-800 mt-1">
-                  {formatDateIndo(selectedIzin.mulai)} — {formatDateIndo(selectedIzin.selesai)}
+                  {formatDateIndo(selectedIzin.mulai)} —{" "}
+                  {formatDateIndo(selectedIzin.selesai)}
                 </p>
                 <p className="text-[11px] font-semibold text-blue-600 mt-1 bg-blue-50 px-2.5 py-0.5 rounded w-fit">
-                  {calculateDaysDiff(selectedIzin.mulai, selectedIzin.selesai)} Hari
+                  {calculateDaysDiff(selectedIzin.mulai, selectedIzin.selesai)}{" "}
+                  Hari
                 </p>
               </div>
 
               <div>
-                <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Perihal / Alasan</p>
+                <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">
+                  Perihal / Alasan
+                </p>
                 <p className="text-xs text-zinc-700 bg-zinc-50 rounded-xl p-3 border border-zinc-100 mt-1 leading-relaxed whitespace-pre-line">
                   {selectedIzin.perihal}
                 </p>
@@ -765,7 +856,9 @@ export default function ClassAttendance() {
 
               {selectedIzin.foto ? (
                 <div>
-                  <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 mb-2">Lampiran Bukti Foto</p>
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 mb-2">
+                    Lampiran Bukti Foto
+                  </p>
                   <div className="border border-zinc-150 rounded-2xl overflow-hidden shadow-sm max-w-full">
                     <img
                       src={selectedIzin.foto}
@@ -776,8 +869,12 @@ export default function ClassAttendance() {
                 </div>
               ) : (
                 <div>
-                  <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Lampiran Bukti Foto</p>
-                  <p className="text-xs text-zinc-400 mt-1 italic">Tidak ada lampiran foto yang diunggah.</p>
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">
+                    Lampiran Bukti Foto
+                  </p>
+                  <p className="text-xs text-zinc-400 mt-1 italic">
+                    Tidak ada lampiran foto yang diunggah.
+                  </p>
                 </div>
               )}
             </div>

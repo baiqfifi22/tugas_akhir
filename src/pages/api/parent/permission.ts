@@ -41,9 +41,38 @@ export default async function handler(
         orderBy: { mulai: "desc" }
       });
 
+      // Hitung limitInfo (sakit+izin & alpa dari mata pelajaran wajib di tahun aktif)
+      const tahunAktif = await prisma.tahunAjaran.findFirst({
+        where: { isActive: true },
+      });
+
+      let limitInfo = { totalIzinAlpa: 0, maxIzinAlpa: 10 };
+
+      if (tahunAktif) {
+        const wajibAbsensi = await prisma.absensi.findMany({
+          where: {
+            siswaId: orangTua.siswa.id,
+            sesi: {
+              mataPelajaran: "MATA_PELAJARAN_WAJIB",
+              tanggal: {
+                gte: new Date(tahunAktif.mulai),
+                lte: new Date(tahunAktif.selesai),
+              },
+            },
+          },
+        });
+        const totalIzin = wajibAbsensi.filter((a) => a.status === "IZIN").length;
+        const totalAlpa = wajibAbsensi.filter((a) => a.status === "ALPA").length;
+        limitInfo = {
+          totalIzinAlpa: totalIzin + totalAlpa,
+          maxIzinAlpa: 10,
+        };
+      }
+
       return res.status(200).json({
         success: true,
-        history
+        history,
+        limitInfo,
       });
     }
 
@@ -62,6 +91,20 @@ export default async function handler(
 
     if (selesai < mulai) {
       return res.status(400).json({ message: "Tanggal selesai tidak boleh sebelum tanggal mulai" });
+    }
+
+    // Cek overlap dengan izin yang sudah ada
+    const overlapping = await prisma.izinKehadiran.findFirst({
+      where: {
+        siswaId: orangTua.siswa.id,
+        mulai: { lte: selesai },
+        selesai: { gte: mulai },
+      },
+    });
+    if (overlapping) {
+      return res.status(400).json({
+        message: `Sudah ada pengajuan izin yang mencakup tanggal tersebut (${overlapping.mulai.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} – ${overlapping.selesai.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}). Hapus atau ubah izin yang ada terlebih dahulu.`,
+      });
     }
 
     // Map reasonType ke StatusKehadiran enum

@@ -11,10 +11,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { scope = "weekly" } = req.query;
 
+    // Gunakan offset UTC+8 (WIB/WITA) agar "hari ini" di server
+    // konsisten dengan tanggal lokal pengguna yang dikirim dari browser.
+    // Tanggal absensi disimpan sebagai YYYY-MM-DDT00:00:00.000Z (UTC midnight
+    // dari tanggal lokal pengguna), sehingga server harus query dengan UTC yang sama.
+    const WIB_OFFSET_MS = 8 * 60 * 60 * 1000; // UTC+8
     const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
+    const localNow = new Date(now.getTime() + WIB_OFFSET_MS);
+    const year = localNow.getUTCFullYear();
+    const month = String(localNow.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(localNow.getUTCDate()).padStart(2, "0");
     const localTodayStr = `${year}-${month}-${day}`;
     const todayStart = new Date(`${localTodayStr}T00:00:00.000Z`);
     const todayEnd = new Date(`${localTodayStr}T23:59:59.999Z`);

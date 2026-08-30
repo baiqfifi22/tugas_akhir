@@ -61,6 +61,11 @@ export default async function handler(
       })
     );
 
+    // Hitung laporan personal yang belum dikonfirmasi
+    const unreadLaporan = await prisma.laporanPersonal.count({
+      where: { guruId, dikonfirmasi: false },
+    });
+
     return res.status(200).json({
       success: true,
       teacher: {
@@ -71,6 +76,7 @@ export default async function handler(
         role: guru.role,
       },
       classes: myClasses,
+      unreadLaporan,
     });
   } catch (error) {
     console.error("API /teacher/me Error:", error);

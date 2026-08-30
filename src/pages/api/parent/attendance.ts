@@ -16,7 +16,6 @@ export default async function handler(
   try {
     const orangTuaId = parseInt(auth.userId, 10);
 
-    // Cari orang tua beserta data siswa
     const orangTua = await prisma.orangTua.findUnique({
       where: { id: orangTuaId },
       include: { siswa: true },
@@ -30,74 +29,100 @@ export default async function handler(
     const { month, full, today, view } = req.query;
 
     const tahunAktif = await prisma.tahunAjaran.findFirst({
-      where: { isActive: true }
+      where: { isActive: true },
     });
 
     if (!tahunAktif) {
       return res.status(404).json({ message: "Tahun ajaran aktif tidak ditemukan" });
     }
 
-    // Build date range filter
+    // ── Build date range filter ────────────────────────────────────────────
     let startDate: Date;
     let endDate: Date;
 
     if (full === "true") {
       startDate = new Date(tahunAktif.mulai);
       endDate = new Date(tahunAktif.selesai);
-    } else if (view === "bulan" && typeof month === "string" && /^\d{4}-\d{2}$/.test(month)) {
+    } else if (
+      view === "bulan" &&
+      typeof month === "string" &&
+      /^\d{4}-\d{2}$/.test(month)
+    ) {
       const [year, mon] = month.split("-").map(Number);
       startDate = new Date(year, mon - 1, 1);
       endDate = new Date(year, mon, 0, 23, 59, 59, 999);
     } else {
-      // Default: "tahun" (Seluruh Tahun Ajaran Aktif)
       startDate = new Date(tahunAktif.mulai);
       endDate = new Date(tahunAktif.selesai);
     }
 
-    // List of months in active academic year
+    // ── Available months: extend hingga bulan saat ini ───────────────────
+    // Fix Bug #6: jika tahunAjaran.selesai sudah lewat (mis. Mei),
+    // bulan saat ini (mis. Juli) tetap muncul di dropdown
     const availableMonths: { value: string; label: string }[] = [];
-    const current = new Date(tahunAktif.mulai);
-    current.setDate(1);
-    const endLimit = new Date(tahunAktif.selesai);
+    const curMonth = new Date(tahunAktif.mulai);
+    curMonth.setDate(1);
+    const nowDate = new Date();
+    const nowFirstDay = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
+    const tahunSelesaiFirstDay = new Date(
+      new Date(tahunAktif.selesai).getFullYear(),
+      new Date(tahunAktif.selesai).getMonth(),
+      1
+    );
+    const monthEndLimit =
+      nowFirstDay > tahunSelesaiFirstDay ? nowFirstDay : tahunSelesaiFirstDay;
+
     let loopCount = 0;
-    while (current <= endLimit && loopCount < 100) {
+    while (curMonth <= monthEndLimit && loopCount < 100) {
       loopCount++;
-      const year = current.getFullYear();
-      const monthNum = current.getMonth() + 1;
-      const value = `${year}-${String(monthNum).padStart(2, "0")}`;
-      const label = current.toLocaleDateString("id-ID", {
-        month: "long",
-        year: "numeric",
+      const y = curMonth.getFullYear();
+      const m = curMonth.getMonth() + 1;
+      availableMonths.push({
+        value: `${y}-${String(m).padStart(2, "0")}`,
+        label: curMonth.toLocaleDateString("id-ID", {
+          month: "long",
+          year: "numeric",
+        }),
       });
-      availableMonths.push({ value, label });
-      current.setMonth(current.getMonth() + 1);
+      curMonth.setMonth(curMonth.getMonth() + 1);
     }
 
-    // Ambil semua absensi siswa dalam rentang waktu
+    // ── Cari kelas siswa & wali kelas ─────────────────────────────────────
+    const siswaKelas = await prisma.siswaKelas.findFirst({
+      where: { siswaId: siswa.id, tahunAjaranId: tahunAktif.id },
+    });
+
+    let waliKelasGuruId: number | null = null;
+    if (siswaKelas) {
+      const wkGT = await prisma.guruTahun.findFirst({
+        where: {
+          kelasId: siswaKelas.kelasId,
+          tahunAjaranId: tahunAktif.id,
+          mataPelajaran: "MATA_PELAJARAN_WAJIB",
+        },
+      });
+      waliKelasGuruId = wkGT?.guruId ?? null;
+    }
+
+    // ── Absensi dalam rentang filter ──────────────────────────────────────
     const absensiList = await prisma.absensi.findMany({
       where: {
         siswaId: siswa.id,
         sesi: {
-          tanggal: {
-            gte: startDate,
-            lte: endDate,
-          },
+          tanggal: { gte: startDate, lte: endDate },
         },
       },
       include: {
         sesi: {
-          include: {
-            guru: true,
-            kelas: true,
-          },
+          include: { guru: true, kelas: true },
         },
       },
-      orderBy: {
-        sesi: { tanggal: "desc" },
-      },
+      orderBy: { sesi: { tanggal: "desc" } },
     });
 
-    const DAYS_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const DAYS_ID = [
+      "Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu",
+    ];
 
     const attendanceData = absensiList.map((a) => {
       const tgl = a.sesi.tanggal;
@@ -109,7 +134,6 @@ export default async function handler(
           : a.status === "IZIN"
           ? "Izin"
           : "Alpa";
-
       return {
         date: tgl.toLocaleDateString("id-ID", {
           day: "numeric",
@@ -120,14 +144,15 @@ export default async function handler(
         status,
         note: a.sesi.notes || "—",
         mapel: a.sesi.mataPelajaran,
+        guruNama: a.sesi.guru.nama,
+        rawDate: tgl.toISOString().split("T")[0], // untuk grouping per hari
       };
     });
 
-    // Statistik hanya menghitung mata pelajaran wajib
+    // Stats hanya mata pelajaran wajib (untuk filter aktif)
     const wajibAbsensiList = absensiList.filter(
       (a) => a.sesi.mataPelajaran === "MATA_PELAJARAN_WAJIB"
     );
-
     const stats = {
       hadir: wajibAbsensiList.filter((a) => a.status === "HADIR").length,
       sakit: wajibAbsensiList.filter((a) => a.status === "SAKIT").length,
@@ -135,40 +160,100 @@ export default async function handler(
       alpa: wajibAbsensiList.filter((a) => a.status === "ALPA").length,
     };
 
-    // Ambil laporan terbaru dari guru untuk siswa ini di bulan ini
-    const laporan = await prisma.laporan.findFirst({
-      where: {
-        siswaId: siswa.id,
-        tanggal: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      include: { guru: true },
-      orderBy: { tanggal: "desc" },
-    });
+    // ── Limit Info (Feature #5): selalu hitung dari full tahun ajaran ─────
+    // Hanya menghitung total izin + alpa (sakit tidak dihitung)
+    let limitIzin = stats.izin;
+    let limitAlpa = stats.alpa;
 
-    const report = laporan
+    if (view === "bulan") {
+      // Ambil ulang dari full tahun untuk limitInfo
+      const fullYearWajib = await prisma.absensi.findMany({
+        where: {
+          siswaId: siswa.id,
+          sesi: {
+            mataPelajaran: "MATA_PELAJARAN_WAJIB",
+            tanggal: {
+              gte: new Date(tahunAktif.mulai),
+              lte: new Date(tahunAktif.selesai),
+            },
+          },
+        },
+      });
+      limitIzin = fullYearWajib.filter((a) => a.status === "IZIN").length;
+      limitAlpa = fullYearWajib.filter((a) => a.status === "ALPA").length;
+    }
+
+    const limitInfo = {
+      totalIzinAlpa: limitIzin + limitAlpa,
+      maxIzinAlpa: 10,
+    };
+
+    // ── Laporan dari wali kelas (Fix Bug #1) ──────────────────────────────
+    // Query berdasarkan guruId wali kelas TANPA batasan tanggal
+    // sehingga laporan Juli tetap muncul walaupun tahunAjaran.selesai = Mei
+    const laporanWaliKelas = waliKelasGuruId
+      ? await prisma.laporan.findFirst({
+          where: { siswaId: siswa.id, guruId: waliKelasGuruId },
+          orderBy: { tanggal: "desc" },
+          include: { guru: true },
+        })
+      : null;
+
+    const report = laporanWaliKelas
       ? {
-          period: laporan.tanggal.toLocaleDateString("id-ID", {
+          period: laporanWaliKelas.tanggal.toLocaleDateString("id-ID", {
             month: "long",
             year: "numeric",
           }),
-          teacher: laporan.guru.nama,
-          notes: laporan.uraian,
+          teacher: laporanWaliKelas.guru.nama,
+          isStructured: !!(
+            laporanWaliKelas.perilaku ||
+            laporanWaliKelas.akademik ||
+            laporanWaliKelas.kedisiplinan
+          ),
+          notes: laporanWaliKelas.uraian,
+          perilaku: laporanWaliKelas.perilaku,
+          akademik: laporanWaliKelas.akademik,
+          kedisiplinan: laporanWaliKelas.kedisiplinan,
+          catatanKhusus: laporanWaliKelas.catatanKhusus,
+          rekomendasi: laporanWaliKelas.rekomendasi,
         }
       : null;
 
-    // Query data absensi hari ini (berdasarkan tanggal lokal client jika ada, jika tidak server)
+    // ── Semua laporan dari semua guru (Feature #9) ────────────────────────
+    const allLaporan = await prisma.laporan.findMany({
+      where: { siswaId: siswa.id },
+      include: { guru: true },
+      orderBy: { tanggal: "desc" },
+      take: 30,
+    });
+
+    const laporanSemuaGuru = allLaporan.map((l) => ({
+      id: String(l.id),
+      guruNama: l.guru.nama,
+      guruId: l.guruId,
+      isWaliKelas: l.guruId === waliKelasGuruId,
+      tanggal: l.tanggal.toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+      isStructured: !!(l.perilaku || l.akademik || l.kedisiplinan),
+      notes: l.uraian,
+      perilaku: l.perilaku,
+      akademik: l.akademik,
+      kedisiplinan: l.kedisiplinan,
+      catatanKhusus: l.catatanKhusus,
+      rekomendasi: l.rekomendasi,
+    }));
+
+    // ── Absensi hari ini ───────────────────────────────────────────────────
     let localTodayStr: string;
     if (typeof today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(today)) {
       localTodayStr = today;
     } else {
-      const nowLocalDate = new Date();
-      const localYear = nowLocalDate.getFullYear();
-      const localMonth = String(nowLocalDate.getMonth() + 1).padStart(2, "0");
-      const localDay = String(nowLocalDate.getDate()).padStart(2, "0");
-      localTodayStr = `${localYear}-${localMonth}-${localDay}`;
+      const nd = new Date();
+      localTodayStr = `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, "0")}-${String(nd.getDate()).padStart(2, "0")}`;
     }
     const todayStart = new Date(`${localTodayStr}T00:00:00.000Z`);
     const todayEnd = new Date(`${localTodayStr}T23:59:59.999Z`);
@@ -176,19 +261,10 @@ export default async function handler(
     const todayAbsensiList = await prisma.absensi.findMany({
       where: {
         siswaId: siswa.id,
-        sesi: {
-          tanggal: {
-            gte: todayStart,
-            lte: todayEnd,
-          },
-        },
+        sesi: { tanggal: { gte: todayStart, lte: todayEnd } },
       },
-      include: {
-        sesi: true,
-      },
-      orderBy: {
-        sesi: { tanggal: "desc" },
-      },
+      include: { sesi: { include: { guru: true } } },
+      orderBy: { sesi: { tanggal: "desc" } },
     });
 
     const todayAttendance = todayAbsensiList.map((a) => {
@@ -200,7 +276,6 @@ export default async function handler(
           : a.status === "IZIN"
           ? "Izin"
           : "Alpa";
-
       return {
         date: a.sesi.tanggal.toLocaleDateString("id-ID", {
           day: "numeric",
@@ -211,6 +286,7 @@ export default async function handler(
         status,
         note: a.sesi.notes || "—",
         mapel: a.sesi.mataPelajaran,
+        guruNama: a.sesi.guru.nama,
       };
     });
 
@@ -221,7 +297,9 @@ export default async function handler(
       attendanceData,
       todayAttendance,
       stats,
+      limitInfo,
       report,
+      laporanSemuaGuru,
       availableMonths,
       academicYearName: tahunAktif.nama,
     });

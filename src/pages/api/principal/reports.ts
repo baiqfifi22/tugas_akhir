@@ -132,8 +132,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // ── Ringkasan ─────────────────────────────────────────────────────────
     const sorted = [...guruScores].sort((a, b) => b.skor - a.skor);
-    const highest = sorted[0] ?? null;
-    const lowest = sorted[sorted.length - 1] ?? null;
+    const maxSkor = sorted[0]?.skor ?? 0;
+    const minSkor = sorted[sorted.length - 1]?.skor ?? 0;
+    const highestAll = sorted.filter((g) => g.skor === maxSkor);
+    const lowestAll  = sorted.filter((g) => g.skor === minSkor);
+    const isTied = maxSkor === minSkor && sorted.length > 1;
 
     return res.status(200).json({
       success: true,
@@ -146,8 +149,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       aspekDikeluhkan,
       distribusi,
       summary: {
-        highest: highest ? { nama: highest.nama, skor: highest.skor } : null,
-        lowest: lowest && lowest.id !== highest?.id ? { nama: lowest.nama, skor: lowest.skor } : null,
+        highest: highestAll.length > 0
+          ? { nama: highestAll.map((g) => g.nama).join(", "), skor: maxSkor, count: highestAll.length }
+          : null,
+        lowest: lowestAll.length > 0 && !isTied
+          ? { nama: lowestAll.map((g) => g.nama).join(", "), skor: minSkor, count: lowestAll.length }
+          : null,
+        isTied,
+        tiedNama: isTied ? sorted.map((g) => g.nama).join(", ") : null,
+        tiedSkor: isTied ? maxSkor : null,
       },
     });
   } catch (error) {

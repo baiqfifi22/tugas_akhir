@@ -9,18 +9,19 @@ datasource db {
 }
 
 model Guru {
-  id          Int           @id @default(autoincrement())
-  nip         String
-  password    String
-  nama        String
-  email       String
-  status      StatusGuru
-  noHp        String
-  role        Role
-  evaluasi    Evaluasi[]
-  guruTahun   GuruTahun[]
-  laporan     Laporan[]
-  sesiAbsensi SesiAbsensi[]
+  id               Int               @id @default(autoincrement())
+  nip              String
+  password         String
+  nama             String
+  email            String
+  status           StatusGuru
+  noHp             String
+  role             Role
+  evaluasi         Evaluasi[]
+  guruTahun        GuruTahun[]
+  laporan          Laporan[]
+  sesiAbsensi      SesiAbsensi[]
+  laporanPersonal  LaporanPersonal[]
 }
 
 model Siswa {
@@ -46,15 +47,16 @@ model Kelas {
 }
 
 model TahunAjaran {
-  id          Int           @id @default(autoincrement())
-  nama        String
-  mulai       DateTime
-  selesai     DateTime
-  isActive    Boolean       @default(false)
-  guruTahun   GuruTahun[]
-  periode     Periode[]
-  sesiAbsensi SesiAbsensi[]
-  siswaKelas  SiswaKelas[]
+  id              Int               @id @default(autoincrement())
+  nama            String
+  mulai           DateTime
+  selesai         DateTime
+  isActive        Boolean           @default(false)
+  guruTahun       GuruTahun[]
+  periode         Periode[]
+  sesiAbsensi     SesiAbsensi[]
+  siswaKelas      SiswaKelas[]
+  laporanPersonal LaporanPersonal[]
 }
 
 model SiswaKelas {
@@ -102,24 +104,30 @@ model Absensi {
 }
 
 model Laporan {
-  id      Int      @id @default(autoincrement())
-  guruId  Int
-  siswaId Int
-  tanggal DateTime
-  uraian  String
-  guru    Guru     @relation(fields: [guruId], references: [id])
-  siswa   Siswa    @relation(fields: [siswaId], references: [id])
+  id            Int      @id @default(autoincrement())
+  guruId        Int
+  siswaId       Int
+  tanggal       DateTime
+  uraian        String   @default("")
+  perilaku      String?
+  akademik      String?
+  kedisiplinan  String?
+  catatanKhusus String?
+  rekomendasi   String?
+  guru          Guru     @relation(fields: [guruId], references: [id])
+  siswa         Siswa    @relation(fields: [siswaId], references: [id])
 }
 
 model OrangTua {
-  id             Int              @id @default(autoincrement())
-  siswaId        Int              @unique
-  password       String
-  nama           String
-  email          String
-  noHp           String
-  siswa          Siswa            @relation(fields: [siswaId], references: [id])
-  submitEvaluasi SubmitEvaluasi[]
+  id              Int               @id @default(autoincrement())
+  siswaId         Int               @unique
+  password        String
+  nama            String
+  email           String
+  noHp            String
+  siswa           Siswa             @relation(fields: [siswaId], references: [id])
+  submitEvaluasi  SubmitEvaluasi[]
+  laporanPersonal LaporanPersonal[]
 }
 
 model IzinKehadiran {
@@ -177,6 +185,22 @@ model AspekEvaluasi {
   tanggal  DateTime   @default(now())
 
   evaluasi Evaluasi[]
+}
+
+model LaporanPersonal {
+  id             Int          @id @default(autoincrement())
+  orangTuaId     Int
+  guruId         Int
+  tahunAjaranId  Int
+  judul          String       @default("")
+  isi            String
+  tanggal        DateTime     @default(now())
+  dikonfirmasi   Boolean      @default(false)
+  tanggalKonfirm DateTime?
+
+  orangTua    OrangTua    @relation(fields: [orangTuaId], references: [id])
+  guru        Guru        @relation(fields: [guruId], references: [id])
+  tahunAjaran TahunAjaran @relation(fields: [tahunAjaranId], references: [id])
 }
 
 enum StatusGuru {

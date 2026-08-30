@@ -5,7 +5,7 @@ import { Layout } from "@/components/Layout";
 import { Card } from "@/components/ui/Card";
 import {
   BarChart2, Award, AlertTriangle, TrendingUp, TrendingDown,
-  Loader2, PieChart,
+  Loader2, PieChart, MessageSquare, CheckCircle2, Clock, Trash2, User, CalendarDays,
 } from "lucide-react";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -42,9 +42,25 @@ interface ReportData {
   aspekDikeluhkan: AspekKeluhan[];
   distribusi: Distribusi[];
   summary: {
-    highest: { nama: string; skor: number } | null;
-    lowest: { nama: string; skor: number } | null;
+    highest: { nama: string; skor: number; count: number } | null;
+    lowest: { nama: string; skor: number; count: number } | null;
+    isTied: boolean;
+    tiedNama: string | null;
+    tiedSkor: number | null;
   };
+}
+
+interface LaporanPersonalItem {
+  id: number;
+  judul: string;
+  isi: string;
+  tanggal: string;
+  dikonfirmasi: boolean;
+  tanggalKonfirm: string | null;
+  orangTua: { id: number; nama: string; noHp: string };
+  siswa: { nama: string; nis: string };
+  guru: { id: number; nama: string; role: string };
+  tahunAjaran: string;
 }
 
 // ── Palet warna ───────────────────────────────────────────────────────────────
@@ -125,6 +141,13 @@ export default function PrincipalReports() {
   const [noDataMsg, setNoDataMsg] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  // ── State Laporan Personal ──────────────────────────────────────────────────
+  const [laporanList, setLaporanList] = useState<LaporanPersonalItem[]>([]);
+  const [laporanLoading, setLaporanLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<Record<number, string>>({});
+  const [laporanFilter, setLaporanFilter] = useState<"semua" | "belum" | "sudah">("semua");
+
   // Ambil list TahunAjaran saat mount
   useEffect(() => {
     fetch("/api/principal/reports")
@@ -161,9 +184,59 @@ export default function PrincipalReports() {
       })
       .catch(console.error)
       .finally(() => setIsLoading(false));
+
+    // Fetch laporan personal sesuai tahun ajaran
+    setLaporanLoading(true);
+    fetch(`/api/principal/laporan-personal?tahunAjaranId=${selectedTahunId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) setLaporanList(d.laporan);
+      })
+      .catch(console.error)
+      .finally(() => setLaporanLoading(false));
   }, [selectedTahunId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleDeleteLaporan = async (id: number) => {
+    setDeletingId(id);
+    setDeleteError((prev) => ({ ...prev, [id]: "" }));
+    try {
+      const res = await fetch("/api/principal/laporan-personal", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ laporanId: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setDeleteError((prev) => ({ ...prev, [id]: data.message || "Gagal menghapus" }));
+        return;
+      }
+      setLaporanList((prev) => prev.filter((l) => l.id !== id));
+    } catch {
+      setDeleteError((prev) => ({ ...prev, [id]: "Gagal menghubungi server" }));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const filteredLaporan = laporanList.filter((l) => {
+    if (laporanFilter === "belum") return !l.dikonfirmasi;
+    if (laporanFilter === "sudah") return l.dikonfirmasi;
+    return true;
+  });
+
+  function formatDate(iso: string) {
+    return new Date(iso).toLocaleDateString("id-ID", {
+      day: "numeric", month: "long", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  }
+  function formatDateShort(iso: string) {
+    return new Date(iso).toLocaleDateString("id-ID", {
+      day: "numeric", month: "short", year: "numeric",
+    });
+  }
 
   // Nilai tertinggi untuk normalisasi bar guru
   const maxSkor = Math.max(...(data?.guruScores.map((g) => g.skor) ?? [1]), 1);
@@ -320,40 +393,204 @@ export default function PrincipalReports() {
 
           {/* ── Ringkasan ────────────────────────────────────────────────── */}
           <h2 className="text-lg font-bold text-zinc-900 mb-4">Ringkasan</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-8">
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+          {data.summary.isTied ? (
+            <Card className="flex items-center gap-4 mb-8">
+              <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                 <Award size={22} />
               </div>
               <div>
-                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Nilai Tertinggi</p>
-                <h3 className="text-xl font-bold text-zinc-900">
-                  {data.summary.highest?.nama ?? "—"}
-                </h3>
-                <p className="text-sm text-emerald-600 font-semibold flex items-center gap-1">
-                  <TrendingUp size={14} />
-                  Skor {data.summary.highest?.skor ?? 0}
-                </p>
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Semua Guru Bernilai Sama</p>
+                <h3 className="text-base font-bold text-zinc-900">{data.summary.tiedNama}</h3>
+                <p className="text-sm text-blue-600 font-semibold">Skor {data.summary.tiedSkor} — tidak ada perbedaan nilai</p>
               </div>
             </Card>
-            <Card className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center shrink-0">
-                <AlertTriangle size={22} />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Nilai Terendah</p>
-                <h3 className="text-xl font-bold text-zinc-900">
-                  {data.summary.lowest?.nama ?? "—"}
-                </h3>
-                <p className="text-sm text-red-500 font-semibold flex items-center gap-1">
-                  <TrendingDown size={14} />
-                  Skor {data.summary.lowest?.skor ?? 0}
-                </p>
-              </div>
-            </Card>
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-8">
+              <Card className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <Award size={22} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Nilai Tertinggi{data.summary.highest && data.summary.highest.count > 1 ? ` (${data.summary.highest.count} guru)` : ""}</p>
+                  <h3 className="text-xl font-bold text-zinc-900">
+                    {data.summary.highest?.nama ?? "—"}
+                  </h3>
+                  <p className="text-sm text-emerald-600 font-semibold flex items-center gap-1">
+                    <TrendingUp size={14} />
+                    Skor {data.summary.highest?.skor ?? 0}
+                  </p>
+                </div>
+              </Card>
+              <Card className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center shrink-0">
+                  <AlertTriangle size={22} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Nilai Terendah{data.summary.lowest && data.summary.lowest.count > 1 ? ` (${data.summary.lowest.count} guru)` : ""}</p>
+                  <h3 className="text-xl font-bold text-zinc-900">
+                    {data.summary.lowest?.nama ?? "—"}
+                  </h3>
+                  <p className="text-sm text-red-500 font-semibold flex items-center gap-1">
+                    <TrendingDown size={14} />
+                    Skor {data.summary.lowest?.skor ?? 0}
+                  </p>
+                </div>
+              </Card>
+            </div>
+          )}
         </>
       )}
+
+      {/* ── Laporan Personal dari Orang Tua ──────────────────────────── */}
+      <div className="mt-8 mb-2">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-violet-100 flex items-center justify-center">
+            <MessageSquare size={18} className="text-violet-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-zinc-900">Laporan Personal dari Orang Tua</h2>
+            <p className="text-xs text-zinc-500">Laporan personal orang tua kepada guru tertentu</p>
+          </div>
+          <span className="ml-auto text-sm font-semibold text-violet-700 bg-violet-100 px-3 py-1 rounded-full">
+            {laporanList.length} laporan
+          </span>
+        </div>
+
+        {/* Filter */}
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {(
+            [
+              { key: "semua", label: "Semua" },
+              { key: "belum", label: `Belum Dikonfirmasi (${laporanList.filter(l => !l.dikonfirmasi).length})` },
+              { key: "sudah", label: `Sudah Dikonfirmasi (${laporanList.filter(l => l.dikonfirmasi).length})` },
+            ] as { key: typeof laporanFilter; label: string }[]
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setLaporanFilter(key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                laporanFilter === key
+                  ? key === "belum"
+                    ? "bg-red-500 text-white shadow-sm"
+                    : key === "sudah"
+                    ? "bg-emerald-500 text-white shadow-sm"
+                    : "bg-violet-600 text-white shadow-sm"
+                  : "bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {laporanLoading ? (
+          <div className="flex items-center justify-center py-12 gap-2 text-zinc-400">
+            <Loader2 size={22} className="animate-spin text-violet-500" />
+            <span className="text-sm">Memuat laporan...</span>
+          </div>
+        ) : filteredLaporan.length === 0 ? (
+          <Card className="text-center py-12 border-t-4 border-t-violet-200">
+            <MessageSquare size={28} className="mx-auto mb-3 text-violet-300" />
+            <p className="text-sm text-zinc-500">
+              {laporanFilter === "semua"
+                ? "Belum ada laporan personal untuk tahun ajaran ini."
+                : laporanFilter === "belum"
+                ? "Tidak ada laporan yang belum dikonfirmasi."
+                : "Tidak ada laporan yang sudah dikonfirmasi."}
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-3 pb-10">
+            {filteredLaporan.map((item) => (
+              <Card
+                key={item.id}
+                className={`p-0 overflow-hidden border-l-4 ${
+                  item.dikonfirmasi ? "border-l-emerald-400" : "border-l-red-400"
+                }`}
+              >
+                {/* Header */}
+                <div className={`px-5 py-3 border-b flex flex-wrap items-center justify-between gap-2 ${
+                  item.dikonfirmasi ? "bg-emerald-50 border-emerald-100" : "bg-red-50 border-red-100"
+                }`}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                      item.dikonfirmasi ? "bg-emerald-100" : "bg-red-100"
+                    }`}>
+                      {item.dikonfirmasi
+                        ? <CheckCircle2 size={14} className="text-emerald-600" />
+                        : <Clock size={14} className="text-red-500" />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-zinc-900 truncate">
+                        {item.orangTua.nama}
+                        <span className="font-normal text-zinc-500"> → </span>
+                        {item.guru.nama}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        Siswa: <span className="font-semibold">{item.siswa.nama}</span> · NIS {item.siswa.nis}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                      item.dikonfirmasi
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-red-100 text-red-600"
+                    }`}>
+                      {item.dikonfirmasi ? "Terkonfirmasi" : "Belum Dikonfirmasi"}
+                    </span>
+                    {/* Tombol hapus — hanya untuk yg sudah dikonfirmasi */}
+                    {item.dikonfirmasi && (
+                      <button
+                        onClick={() => handleDeleteLaporan(item.id)}
+                        disabled={deletingId === item.id}
+                        title="Hapus laporan"
+                        className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                      >
+                        {deletingId === item.id
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <Trash2 size={14} />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="px-5 py-4">
+                  {item.judul && (
+                    <p className="text-sm font-bold text-zinc-900 mb-2">{item.judul}</p>
+                  )}
+                  <p className="text-sm text-zinc-800 leading-relaxed bg-zinc-50 rounded-xl p-3 border border-zinc-100 mb-3">
+                    {item.isi}
+                  </p>
+                  <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
+                    <span className="flex items-center gap-1.5">
+                      <CalendarDays size={12} />
+                      Dikirim: {formatDate(item.tanggal)}
+                    </span>
+                    {item.dikonfirmasi && item.tanggalKonfirm && (
+                      <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                        <CheckCircle2 size={12} />
+                        Dikonfirmasi: {formatDateShort(item.tanggalKonfirm)}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1.5">
+                      <User size={12} />
+                      Guru: {item.guru.nama}
+                    </span>
+                  </div>
+                  {deleteError[item.id] && (
+                    <div className="flex items-center gap-1.5 text-xs text-red-600 mt-2">
+                      <AlertTriangle size={12} />
+                      {deleteError[item.id]}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     </Layout>
   );
 }

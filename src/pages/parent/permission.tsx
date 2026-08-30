@@ -35,6 +35,7 @@ export default function ParentPermission() {
 
   const [history, setHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [limitInfo, setLimitInfo] = useState<{ totalIzinAlpa: number; maxIzinAlpa: number } | null>(null);
 
   const fetchHistory = async () => {
     try {
@@ -43,6 +44,7 @@ export default function ParentPermission() {
         const data = await res.json();
         if (data.success) {
           setHistory(data.history || []);
+          if (data.limitInfo) setLimitInfo(data.limitInfo);
         }
       }
     } catch (err) {
@@ -166,6 +168,36 @@ export default function ParentPermission() {
           </p>
         </div>
       </div>
+
+      {/* Notifikasi Batas Kehadiran (Izin & Alpa) */}
+      {limitInfo && limitInfo.totalIzinAlpa > 0 && (
+        <div className="mb-6 flex flex-col gap-2">
+          {(() => {
+            const used = limitInfo.totalIzinAlpa;
+            const max = limitInfo.maxIzinAlpa;
+            const remaining = Math.max(0, max - used);
+            const isDanger = used >= max;
+            const isWarning = used >= 7 && !isDanger;
+            return (
+              <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-sm ${
+                isDanger ? "bg-red-50 border-red-200 text-red-800" :
+                isWarning ? "bg-yellow-50 border-yellow-200 text-yellow-800" :
+                "bg-blue-50 border-blue-200 text-blue-800"
+              }`}>
+                <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-sm">Batas Ketidakhadiran (Izin &amp; Alpa): {used} dari {max} hari terpakai</p>
+                  {remaining > 0 ? (
+                    <p className="text-xs mt-0.5 font-normal">Sisa {remaining} hari lagi sebelum batas maksimal ketidakhadiran</p>
+                  ) : (
+                    <p className="text-xs mt-0.5 font-semibold">Batas maksimal ketidakhadiran (Izin & Alpa) sudah tercapai!</p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Success Banner */}
       {isSubmitted && (

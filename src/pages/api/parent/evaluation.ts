@@ -77,6 +77,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           status: "SUDAH_SUBMIT",
           periode: { id: periode.id, mulai: periode.mulai.toISOString(), selesai: periode.selesai.toISOString() },
           guruList: guruListDisabled,
+          guruMapelList: [],
           aspekSekolah: activeAspekDisabled.filter((a) => a.tipe === "SEKOLAH").map((a) => ({ id: a.id, teks: a.teks })),
           aspekGuru: activeAspekDisabled.filter((a) => a.tipe === "GURU").map((a) => ({ id: a.id, teks: a.teks })),
         });
@@ -116,6 +117,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }));
       }
 
+      // Ambil guru mapel (selain wali kelas, opsional untuk evaluasi)
+      let guruMapelList: { id: number; nama: string; mataPelajaran: string }[] = [];
+      if (siswaKelas) {
+        const guruMapelTahun = await prisma.guruTahun.findMany({
+          where: {
+            kelasId: siswaKelas.kelasId,
+            tahunAjaranId: tahunAktif.id,
+            mataPelajaran: { not: "MATA_PELAJARAN_WAJIB" },
+          },
+          include: { guru: true },
+          distinct: ["guruId"],
+        });
+        guruMapelList = guruMapelTahun.map((gt) => ({
+          id: gt.guru.id,
+          nama: gt.guru.nama,
+          mataPelajaran: gt.mataPelajaran,
+        }));
+      }
+
       // Ambil aspek evaluasi dinamis — kembalikan id + teks (bukan hanya teks)
       const activeAspek = await prisma.aspekEvaluasi.findMany({
         where: { aktif: true },
@@ -135,6 +155,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         status: "AKTIF",
         periode: { id: periode.id, mulai: periode.mulai.toISOString(), selesai: periode.selesai.toISOString() },
         guruList,
+        guruMapelList,
         aspekSekolah,
         aspekGuru,
       });
@@ -142,7 +163,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // ── POST: Submit evaluasi ─────────────────────────────────────────────
     if (req.method === "POST") {
-      const { periodeId, evaluasiSekolah, evaluasiGuru, saranSekolah, kritikGuru } = req.body;
+      const { periodeId, evaluasiSekolah, evaluasiGuru, saranSekolah, kritikGuru, evaluasiGuruMapel } = req.body;
 
       if (!periodeId) return res.status(400).json({ message: "periodeId harus disertakan" });
 
@@ -208,6 +229,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           data: { orangTuaId, periodeId: Number(periodeId), tanggal },
         }),
       ]);
+
+      // Simpan evaluasi guru mapel (opsional — bisa kosong)
+      if (Array.isArray(evaluasiGuruMapel) && evaluasiGuruMapel.length > 0) {
+        for (const gm of evaluasiGuruMapel) {
+          if (!gm.guruId || !Array.isArray(gm.aspekList)) continue;
+          for (const aspek of gm.aspekList) {
+            if (!aspek.aspekId || !aspek.skor || aspek.skor < 1) continue;
+            await prisma.evaluasi.create({
+              data: {
+                periodeId: parseInt(periodeId, 10),
+                aspekId: aspek.aspekId,
+                tipe: "GURU",
+                guruId: gm.guruId,
+                skor: aspek.skor,
+                kritik: gm.kritik || null,
+                tanggal: new Date(),
+              },
+            });
+          }
+        }
+      }
 
       return res.status(201).json({ success: true, message: "Evaluasi berhasil dikirim" });
     }

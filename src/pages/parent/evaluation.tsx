@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { GetServerSideProps } from "next";
 import { requireRole } from "@/lib/withAuth";
+import Link from "next/link";
 import { Layout } from "@/components/Layout";
 import { Card } from "@/components/ui/Card";
 import {
@@ -12,6 +13,8 @@ import {
   AlertTriangle,
   School,
   UserCheck,
+  MessageSquare,
+  ArrowRight,
 } from "lucide-react";
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -33,6 +36,7 @@ interface Guru {
   id: number;
   nama: string;
   mataPelajaran: string;
+  role?: string;
 }
 
 interface Periode {
@@ -47,6 +51,34 @@ function formatDate(iso: string) {
     month: "long",
     year: "numeric",
   });
+}
+
+// ── Laporan Personal Card (shortcut) ───────────────────────────────────────────
+
+function LaporanPersonalCard() {
+  return (
+    <Link href="/parent/laporan-personal">
+      <Card
+        interactive
+        className="group flex items-center gap-4 p-5 border-l-4 border-l-violet-400 hover:border-l-violet-600 hover:shadow-md transition-all cursor-pointer"
+      >
+        <div className="w-12 h-12 rounded-2xl bg-violet-100 flex items-center justify-center shrink-0 group-hover:bg-violet-200 transition-colors">
+          <MessageSquare size={22} className="text-violet-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-zinc-900 text-sm">Laporan Personal ke Guru</p>
+          <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
+            Sampaikan pesan atau masukan personal kepada guru tertentu secara langsung.
+            Tersedia kapan saja, tidak tergantung periode evaluasi.
+          </p>
+        </div>
+        <ArrowRight
+          size={18}
+          className="text-violet-400 group-hover:text-violet-600 group-hover:translate-x-1 transition-all shrink-0"
+        />
+      </Card>
+    </Link>
+  );
 }
 
 // ── Likert Table ───────────────────────────────────────────────────────────────
@@ -110,13 +142,9 @@ function LikertTable({
               return (
                 <tr
                   key={item.id}
-                  className={`transition-colors ${
-                    disabled ? "" : "hover:bg-orange-50/30"
-                  }`}
+                  className={`transition-colors ${disabled ? "" : "hover:bg-orange-50/30"}`}
                 >
-                  <td className="py-4 px-4 text-zinc-700 leading-relaxed">
-                    {item.teks}
-                  </td>
+                  <td className="py-4 px-4 text-zinc-700 leading-relaxed">{item.teks}</td>
                   {[1, 2, 3, 4, 5].map((val) => {
                     const isSelected = selected === val;
                     return (
@@ -128,11 +156,7 @@ function LikertTable({
                           className={`
                             w-9 h-9 rounded-full border-2 transition-all duration-150 mx-auto flex items-center justify-center
                             focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-orange-400
-                            ${
-                              disabled
-                                ? "cursor-default"
-                                : "cursor-pointer hover:border-orange-400 hover:bg-orange-50"
-                            }
+                            ${disabled ? "cursor-default" : "cursor-pointer hover:border-orange-400 hover:bg-orange-50"}
                             ${
                               isSelected
                                 ? disabled
@@ -186,11 +210,7 @@ function LikertTable({
                       onClick={() => !disabled && onScore(key, val)}
                       className={`
                         w-10 h-10 rounded-full border-2 transition-all duration-150 flex items-center justify-center text-xs font-bold
-                        ${
-                          disabled
-                            ? "cursor-default text-zinc-400"
-                            : "cursor-pointer hover:border-orange-400 hover:bg-orange-50"
-                        }
+                        ${disabled ? "cursor-default text-zinc-400" : "cursor-pointer hover:border-orange-400 hover:bg-orange-50"}
                         ${
                           isSelected
                             ? disabled
@@ -221,11 +241,14 @@ export default function ParentEvaluation() {
   const [justSubmitted, setJustSubmitted] = useState(false);
   const [periode, setPeriode] = useState<Periode | null>(null);
   const [guruList, setGuruList] = useState<Guru[]>([]);
+  const [guruMapelList, setGuruMapelList] = useState<Guru[]>([]);
   const [aspekSekolah, setAspekSekolah] = useState<AspekItem[]>([]);
   const [aspekGuru, setAspekGuru] = useState<AspekItem[]>([]);
   const [message, setMessage] = useState("");
+  const [kritikGuruMapel, setKritikGuruMapel] = useState<Record<number, string>>({});
+  const [mapelScores, setMapelScores] = useState<Record<string, number>>({});
 
-  const [activeTab, setActiveTab] = useState<"sekolah" | "guru">("sekolah");
+  const [activeTab, setActiveTab] = useState<"sekolah" | "guru" | "mapel">("sekolah");
   const [scores, setScores] = useState<Record<string, number>>({});
   const [saranSekolah, setSaranSekolah] = useState("");
   const [kritikGuru, setKritikGuru] = useState<Record<number, string>>({});
@@ -240,11 +263,11 @@ export default function ParentEvaluation() {
           setStatus(d.status as EvalStatus);
           if (d.periode) setPeriode(d.periode);
           if (d.guruList) setGuruList(d.guruList);
+          if (d.guruMapelList) setGuruMapelList(d.guruMapelList);
           if (d.aspekSekolah) setAspekSekolah(d.aspekSekolah);
           if (d.aspekGuru) setAspekGuru(d.aspekGuru);
           if (d.message) setMessage(d.message);
 
-          // Restore dari localStorage saat buka ulang setelah submit
           if (d.status === "SUDAH_SUBMIT" && d.periode?.id) {
             try {
               const saved = localStorage.getItem(`eval_submit_${d.periode.id}`);
@@ -255,7 +278,7 @@ export default function ParentEvaluation() {
                 setKritikGuru(parsed.kritikGuru || {});
               }
             } catch {
-              // localStorage tidak tersedia — abaikan
+              // abaikan
             }
           }
         }
@@ -267,29 +290,16 @@ export default function ParentEvaluation() {
     setScores((prev) => ({ ...prev, [key]: val }));
   };
 
-  // Cek field mana yang belum diisi — kembalikan tab + pesan
   const getMissingField = (): { tab: "sekolah" | "guru"; msg: string } | null => {
     if (aspekSekolah.some((a) => (scores[`sekolah_${a.id}`] || 0) === 0))
-      return {
-        tab: "sekolah",
-        msg: "Harap isi semua poin penilaian di bagian Evaluasi Sekolah.",
-      };
+      return { tab: "sekolah", msg: "Harap isi semua poin penilaian di bagian Evaluasi Sekolah." };
     if (!saranSekolah.trim())
-      return {
-        tab: "sekolah",
-        msg: "Harap isi kolom Kesan & Pesan untuk Sekolah.",
-      };
+      return { tab: "sekolah", msg: "Harap isi kolom Kesan & Pesan untuk Sekolah." };
     for (const g of guruList) {
       if (aspekGuru.some((a) => (scores[`guru_${g.id}_${a.id}`] || 0) === 0))
-        return {
-          tab: "guru",
-          msg: `Harap isi semua poin penilaian untuk ${g.nama}.`,
-        };
+        return { tab: "guru", msg: `Harap isi semua poin penilaian untuk ${g.nama}.` };
       if (!(kritikGuru[g.id] || "").trim())
-        return {
-          tab: "guru",
-          msg: `Harap isi kolom Kritik / Pesan untuk ${g.nama}.`,
-        };
+        return { tab: "guru", msg: `Harap isi kolom Kritik / Pesan untuk ${g.nama}.` };
     }
     return null;
   };
@@ -326,6 +336,16 @@ export default function ParentEvaluation() {
         kritikGuruPayload[k] = (v as string).trim();
       });
 
+      const evaluasiGuruMapelPayload = guruMapelList
+        .map((g) => ({
+          guruId: g.id,
+          aspekList: aspekGuru
+            .filter((a) => (mapelScores[`mapel_${g.id}_${a.id}`] || 0) > 0)
+            .map((a) => ({ aspekId: a.id, skor: mapelScores[`mapel_${g.id}_${a.id}`] })),
+          kritik: (kritikGuruMapel[g.id] || "").trim(),
+        }))
+        .filter((g) => g.aspekList.length > 0);
+
       const res = await fetch("/api/parent/evaluation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -335,6 +355,7 @@ export default function ParentEvaluation() {
           evaluasiGuru,
           saranSekolah: saranSekolah.trim(),
           kritikGuru: kritikGuruPayload,
+          evaluasiGuruMapel: evaluasiGuruMapelPayload,
         }),
       });
 
@@ -344,7 +365,6 @@ export default function ParentEvaluation() {
         return;
       }
 
-      // Simpan ke localStorage supaya bisa ditampilkan saat buka ulang
       if (periode?.id) {
         try {
           localStorage.setItem(
@@ -352,7 +372,7 @@ export default function ParentEvaluation() {
             JSON.stringify({ scores, saranSekolah: saranSekolah.trim(), kritikGuru })
           );
         } catch {
-          // Abaikan jika localStorage tidak tersedia
+          // abaikan
         }
       }
 
@@ -383,17 +403,13 @@ export default function ParentEvaluation() {
     return (
       <Layout role="parent">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-zinc-900">
-            Evaluasi Sekolah dan Wali Kelas
-          </h1>
+          <h1 className="text-2xl font-bold text-zinc-900">Evaluasi Sekolah dan Wali Kelas</h1>
         </div>
-        <Card className="max-w-lg mx-auto text-center py-14 border-t-4 border-t-orange-400">
+        <Card className="max-w-lg mx-auto text-center py-14 border-t-4 border-t-orange-400 mb-6">
           <div className="w-16 h-16 rounded-full bg-orange-50 border border-orange-200 flex items-center justify-center mx-auto mb-4">
             <Clock size={28} className="text-orange-500" />
           </div>
-          <h2 className="text-lg font-bold text-zinc-800 mb-2">
-            Belum Waktunya Mengisi Evaluasi
-          </h2>
+          <h2 className="text-lg font-bold text-zinc-800 mb-2">Belum Waktunya Mengisi Evaluasi</h2>
           <p className="text-zinc-500 text-sm leading-relaxed">
             {message || "Periode evaluasi belum dibuka. Silakan cek kembali nanti."}
           </p>
@@ -404,6 +420,7 @@ export default function ParentEvaluation() {
             </div>
           )}
         </Card>
+        <LaporanPersonalCard />
       </Layout>
     );
   }
@@ -413,21 +430,18 @@ export default function ParentEvaluation() {
     return (
       <Layout role="parent">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-zinc-900">
-            Evaluasi Sekolah dan Wali Kelas
-          </h1>
+          <h1 className="text-2xl font-bold text-zinc-900">Evaluasi Sekolah dan Wali Kelas</h1>
         </div>
-        <Card className="max-w-lg mx-auto text-center py-14 border-t-4 border-t-zinc-300">
+        <Card className="max-w-lg mx-auto text-center py-14 border-t-4 border-t-zinc-300 mb-6">
           <div className="w-16 h-16 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center mx-auto mb-4">
             <CalendarX size={28} className="text-zinc-400" />
           </div>
-          <h2 className="text-lg font-bold text-zinc-800 mb-2">
-            Periode Evaluasi Sudah Selesai
-          </h2>
+          <h2 className="text-lg font-bold text-zinc-800 mb-2">Periode Evaluasi Sudah Selesai</h2>
           <p className="text-zinc-500 text-sm leading-relaxed">
             Periode evaluasi telah ditutup. Terima kasih atas partisipasi Anda.
           </p>
         </Card>
+        <LaporanPersonalCard />
       </Layout>
     );
   }
@@ -436,17 +450,15 @@ export default function ParentEvaluation() {
   if (status === "SUDAH_SUBMIT" && justSubmitted) {
     return (
       <Layout role="parent">
-        <div className="flex items-center justify-center min-h-[65vh] py-16">
+        <div className="flex items-center justify-center min-h-[50vh] py-12">
           <Card className="max-w-md w-full text-center py-16 px-8 border-t-4 border-t-orange-400 shadow-lg">
             <div className="w-20 h-20 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 size={40} className="text-emerald-500" />
             </div>
-            <h2 className="text-xl font-bold text-zinc-900 mb-3">
-              Berhasil Mengirim Hasil Survey
-            </h2>
+            <h2 className="text-xl font-bold text-zinc-900 mb-3">Berhasil Mengirim Hasil Survey</h2>
             <p className="text-zinc-500 text-sm leading-relaxed max-w-xs mx-auto">
-              Terima kasih atas partisipasi Anda! Masukan Anda sangat berarti bagi
-              pengembangan sekolah dan wali kelas kami.
+              Terima kasih atas partisipasi Anda! Masukan Anda sangat berarti bagi pengembangan
+              sekolah dan wali kelas kami.
             </p>
             {periode && (
               <p className="mt-5 text-xs text-zinc-400">
@@ -454,6 +466,9 @@ export default function ParentEvaluation() {
               </p>
             )}
           </Card>
+        </div>
+        <div className="mt-2">
+          <LaporanPersonalCard />
         </div>
       </Layout>
     );
@@ -467,9 +482,7 @@ export default function ParentEvaluation() {
     <Layout role="parent">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-zinc-900">
-          Evaluasi Sekolah dan Wali Kelas
-        </h1>
+        <h1 className="text-2xl font-bold text-zinc-900">Evaluasi Sekolah dan Wali Kelas</h1>
         {periode && (
           <p className="text-zinc-500 text-sm mt-1">
             Periode evaluasi:{" "}
@@ -478,6 +491,11 @@ export default function ParentEvaluation() {
             </span>
           </p>
         )}
+      </div>
+
+      {/* Shortcut Laporan Personal */}
+      <div className="mb-6">
+        <LaporanPersonalCard />
       </div>
 
       {/* Banner: Sudah Submit */}
@@ -503,13 +521,11 @@ export default function ParentEvaluation() {
         </div>
       )}
 
-      {/* Sudah submit tapi tidak ada data untuk ditampilkan */}
+      {/* Sudah submit tapi tidak ada data */}
       {isDisabled && !hasRestoredData ? (
         <Card className="text-center py-12 border-t-4 border-t-orange-300">
           <CheckCircle2 size={32} className="mx-auto mb-3 text-orange-400" />
-          <p className="font-medium text-zinc-700">
-            Anda telah mengisi evaluasi untuk periode ini.
-          </p>
+          <p className="font-medium text-zinc-700">Anda telah mengisi evaluasi untuk periode ini.</p>
           <p className="text-sm text-zinc-400 mt-1">
             Jawaban tidak dapat ditampilkan kembali dari perangkat ini.
           </p>
@@ -522,6 +538,9 @@ export default function ParentEvaluation() {
               [
                 { key: "sekolah", label: "Evaluasi Sekolah", icon: School },
                 { key: "guru", label: "Evaluasi Wali Kelas", icon: UserCheck },
+                ...(guruMapelList.length > 0
+                  ? [{ key: "mapel" as const, label: "Guru Mapel", icon: UserCheck }]
+                  : []),
               ] as const
             ).map(({ key, label, icon: Icon }) => (
               <button
@@ -539,8 +558,8 @@ export default function ParentEvaluation() {
                     activeTab === key
                       ? "bg-orange-500 text-white shadow-md shadow-orange-200"
                       : isDisabled
-                        ? "text-zinc-400 cursor-default"
-                        : "text-orange-700 hover:bg-orange-100 cursor-pointer"
+                      ? "text-zinc-400 cursor-default"
+                      : "text-orange-700 hover:bg-orange-100 cursor-pointer"
                   }
                 `}
               >
@@ -557,9 +576,7 @@ export default function ParentEvaluation() {
                 <div className="px-6 py-4 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-white">
                   <div className="flex items-center gap-2">
                     <School size={18} className="text-orange-500" />
-                    <h2 className="text-base font-bold text-zinc-900">
-                      Penilaian Sekolah
-                    </h2>
+                    <h2 className="text-base font-bold text-zinc-900">Penilaian Sekolah</h2>
                   </div>
                   <p className="text-xs text-zinc-500 mt-0.5">
                     Berikan penilaian 1 (rendah) hingga 5 (tinggi) untuk setiap pernyataan.
@@ -574,14 +591,10 @@ export default function ParentEvaluation() {
                     onScore={handleScore}
                     disabled={isDisabled}
                   />
-
-                  {/* Kesan & Pesan */}
                   <div className="mt-8 pt-6 border-t border-orange-100">
                     <label className="block text-sm font-semibold text-zinc-700 mb-1">
                       Kesan &amp; Pesan{" "}
-                      {!isDisabled && (
-                        <span className="text-red-500 font-bold">*</span>
-                      )}
+                      {!isDisabled && <span className="text-red-500 font-bold">*</span>}
                     </label>
                     <p className="text-xs text-zinc-400 mb-3">
                       Tuliskan kesan, pesan, atau masukan Anda untuk sekolah secara umum.
@@ -606,10 +619,7 @@ export default function ParentEvaluation() {
             {/* ── Tab: Evaluasi Wali Kelas ─────────────────────────────────── */}
             {activeTab === "guru" &&
               guruList.map((guru) => (
-                <Card
-                  key={guru.id}
-                  className="p-0 overflow-hidden border-t-4 border-t-orange-400"
-                >
+                <Card key={guru.id} className="p-0 overflow-hidden border-t-4 border-t-orange-400">
                   <div className="px-6 py-4 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-white">
                     <div className="flex items-center gap-2">
                       <UserCheck size={18} className="text-orange-500" />
@@ -628,14 +638,10 @@ export default function ParentEvaluation() {
                       onScore={handleScore}
                       disabled={isDisabled}
                     />
-
-                    {/* Kritik per Guru */}
                     <div className="mt-8 pt-6 border-t border-orange-100">
                       <label className="block text-sm font-semibold text-zinc-700 mb-1">
                         Kritik / Pesan untuk {guru.nama}{" "}
-                        {!isDisabled && (
-                          <span className="text-red-500 font-bold">*</span>
-                        )}
+                        {!isDisabled && <span className="text-red-500 font-bold">*</span>}
                       </label>
                       <p className="text-xs text-zinc-400 mb-3">
                         Sampaikan kritik atau pesan membangun untuk wali kelas.
@@ -644,10 +650,7 @@ export default function ParentEvaluation() {
                         rows={4}
                         value={kritikGuru[guru.id] || ""}
                         onChange={(e) =>
-                          setKritikGuru((prev) => ({
-                            ...prev,
-                            [guru.id]: e.target.value,
-                          }))
+                          setKritikGuru((prev) => ({ ...prev, [guru.id]: e.target.value }))
                         }
                         disabled={isDisabled}
                         placeholder={`Tuliskan kritik atau pesan untuk ${guru.nama}...`}
@@ -662,7 +665,6 @@ export default function ParentEvaluation() {
                 </Card>
               ))}
 
-            {/* Tidak ada guru tapi di tab guru */}
             {activeTab === "guru" && guruList.length === 0 && (
               <Card className="text-center py-12 border-t-4 border-t-orange-200">
                 <UserCheck size={28} className="mx-auto mb-3 text-orange-300" />
@@ -670,6 +672,71 @@ export default function ParentEvaluation() {
                   Data wali kelas belum tersedia untuk anak Anda pada tahun ajaran ini.
                 </p>
               </Card>
+            )}
+
+            {/* ── Tab: Evaluasi Guru Mapel (Opsional) ─────────────────── */}
+            {activeTab === "mapel" && guruMapelList.length > 0 && (
+              <>
+                <div className="mb-4 flex items-center gap-2 px-1">
+                  <span className="text-xs bg-orange-100 text-orange-700 px-2.5 py-1 rounded-full font-bold border border-orange-200">
+                    Opsional
+                  </span>
+                  <p className="text-sm text-zinc-500">
+                    Evaluasi guru mapel bersifat opsional. Anda dapat mengosongkan bagian ini.
+                  </p>
+                </div>
+                {guruMapelList.map((guru) => (
+                  <Card
+                    key={guru.id}
+                    className="p-0 overflow-hidden border-t-4 border-t-orange-300"
+                  >
+                    <div className="px-6 py-4 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-white">
+                      <div className="flex items-center gap-2">
+                        <UserCheck size={18} className="text-orange-400" />
+                        <h2 className="text-base font-bold text-zinc-900">
+                          Penilaian — {guru.nama}
+                        </h2>
+                        <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-semibold">
+                          {guru.mataPelajaran.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-0.5">Guru Mata Pelajaran · Opsional</p>
+                    </div>
+                    <div className="p-6">
+                      <LikertTable
+                        title={`Pernyataan tentang ${guru.nama}`}
+                        pertanyaan={aspekGuru}
+                        prefix={`mapel_${guru.id}`}
+                        scores={mapelScores}
+                        onScore={(key, val) =>
+                          setMapelScores((prev) => ({ ...prev, [key]: val }))
+                        }
+                        disabled={isDisabled}
+                      />
+                      <div className="mt-6 pt-4 border-t border-orange-100">
+                        <label className="block text-sm font-semibold text-zinc-700 mb-1">
+                          Kritik / Pesan untuk {guru.nama}
+                          <span className="ml-2 text-xs font-normal text-zinc-400">(opsional)</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={kritikGuruMapel[guru.id] || ""}
+                          onChange={(e) =>
+                            setKritikGuruMapel((prev) => ({ ...prev, [guru.id]: e.target.value }))
+                          }
+                          disabled={isDisabled}
+                          placeholder={`Tuliskan kritik atau pesan untuk ${guru.nama}... (opsional)`}
+                          className={`w-full border rounded-xl px-4 py-3 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400 transition-colors resize-none ${
+                            isDisabled
+                              ? "bg-zinc-50 border-zinc-200 text-zinc-500 cursor-default"
+                              : "bg-orange-50/40 border-orange-200 focus:bg-white"
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </>
             )}
 
             {/* ── Tombol Kirim ─────────────────────────────────────────────── */}
